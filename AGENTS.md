@@ -15,20 +15,19 @@ make permission or trust-boundary changes explicit.
 
 ## Repository Structure
 
-The repository is still in its bootstrap stage; definitions and workflows have
-not been added yet. Use this layout as they are introduced:
+Definitions use a nested browser-family and release-channel layout:
 
-- `browsers/<slug>/`
-  - One browser or release channel, such as `firefox-dev`.
-- `browsers/<slug>/<app-id>.yaml`
+- `browsers/<browser>/<channel>/`
+  - One release channel, such as `firefox/dev`.
+- `browsers/<browser>/<channel>/<app-id>.yaml`
   - The Flatpak manifest and its upstream-source checker metadata.
-- `browsers/<slug>/files/`
+- `browsers/<browser>/<channel>/files/`
   - Desktop files, AppStream metadata, icons, service files, and other inputs.
-- `browsers/<slug>/generated-sources.json`
-  - A checked-in source-list baseline when the definition requires one.
-- `browsers/<slug>/linter.json`
+- `browsers/<browser>/<channel>/langpack.json`
+  - The checked-in language-code selection input for language-pack resolution.
+- `browsers/<browser>/<channel>/linter.json`
   - Reviewed, package-specific linter exceptions.
-- `browsers/<slug>/*.flatpakref`
+- `browsers/<browser>/<channel>/*.flatpakref`
   - The installation reference for the Pages-hosted repository.
 - `.github/workflows/`
   - Pull-request validation and artifact-based Pages publication.

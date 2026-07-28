@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.piquark6046.Firefox.Dev</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+
+  <name>Firefox Developer Edition</name>
+  <summary>Web browser with tools for web developers</summary>
+
+  <description>
+    <p>
+      Firefox Developer Edition is Mozilla's web browser for developers, with
+      developer tools and experimental platform features enabled earlier in
+      the release cycle.
+    </p>
+    <p>
+      This package redistributes Mozilla's unmodified Developer Edition binary.
+      The Flatpak packaging and repository are maintained independently and are
+      not supported by Mozilla.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">dev.piquark6046.Firefox.Dev.desktop</launchable>
+  <provides>
+    <binary>firefox-dev</binary>
+    <mediatype>text/html</mediatype>
+    <mediatype>application/xhtml+xml</mediatype>
+    <mediatype>x-scheme-handler/http</mediatype>
+    <mediatype>x-scheme-handler/https</mediatype>
+  </provides>
+
+  <developer id="mozilla.org">
+    <name>Mozilla</name>
+  </developer>
+
+  <url type="homepage">https://www.mozilla.org/firefox/developer/</url>
+  <url type="bugtracker">https://github.com/piquark6046/browsers-flatpak/issues</url>
+  <url type="help">https://support.mozilla.org/products/firefox</url>
+  <url type="donation">https://foundation.mozilla.org/?form=donate</url>
+  <url type="translate">https://pontoon.mozilla.org/projects/firefox/</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="154.0b2" date="2026-07-24"/>
+  </releases>
+</component>

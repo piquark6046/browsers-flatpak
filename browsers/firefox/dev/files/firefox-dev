@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -eu
+
+export TMPDIR="${XDG_CACHE_HOME}/tmp"
+mkdir -p "${TMPDIR}"
+
+exec /app/lib/firefox/firefox \
+  --name dev.piquark6046.Firefox.Dev \
+  --class dev.piquark6046.Firefox.Dev \
+  "$@"

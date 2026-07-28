@@ -1,0 +1,6 @@
+{
+  "dev.piquark6046.Firefox.Dev": [
+    "appid-url-not-reachable",
+    "finish-args-unnecessary-xdg-config-gtk-3.0-ro-access"
+  ]
+}

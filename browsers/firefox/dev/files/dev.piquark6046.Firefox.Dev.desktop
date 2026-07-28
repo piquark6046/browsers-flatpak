@@ -1,0 +1,28 @@
+[Desktop Entry]
+Version=1.0
+Name=Firefox Developer Edition
+GenericName=Web Browser
+Comment=Browse the Web with Firefox Developer Edition
+Keywords=Internet;WWW;Browser;Web;Explorer;
+Exec=firefox-dev %u
+Icon=dev.piquark6046.Firefox.Dev
+Terminal=false
+Type=Application
+MimeType=text/html;text/xml;application/xhtml+xml;application/vnd.mozilla.xul+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+StartupWMClass=dev.piquark6046.Firefox.Dev
+Categories=Network;WebBrowser;
+Actions=new-window;new-private-window;profile-manager;
+X-GNOME-UsesNotifications=true
+
+[Desktop Action new-window]
+Name=Open a New Window
+Exec=firefox-dev --new-window
+
+[Desktop Action new-private-window]
+Name=Open a New Private Window
+Exec=firefox-dev --private-window
+
+[Desktop Action profile-manager]
+Name=Open the Profile Manager
+Exec=firefox-dev --ProfileManager

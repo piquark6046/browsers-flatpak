@@ -1,0 +1,115 @@
+id: dev.piquark6046.Firefox.Dev
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+base: org.mozilla.firefox.BaseApp
+base-version: '25.08'
+command: firefox-dev
+separate-locales: true
+
+build-options:
+  no-debuginfo: true
+  strip: false
+
+add-extensions:
+  dev.piquark6046.Firefox.Dev.systemconfig:
+    directory: etc/firefox
+    no-autodownload: true
+
+finish-args:
+  - --require-version=0.11.1
+  - --allow=devel
+  - --device=all
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --socket=pcsc
+  - --socket=cups
+  - --persist=.mozilla
+  - --env=DICPATH=/usr/share/hunspell
+  - --env=MOZ_APP_REMOTINGNAME=dev.piquark6046.Firefox.Dev
+  - --filesystem=xdg-config/gtk-3.0:ro
+  - --filesystem=xdg-download:rw
+  - --filesystem=/run/.heim_org.h5l.kcm-socket
+  - --filesystem=xdg-run/speech-dispatcher:ro
+  - --talk-name=org.freedesktop.FileManager1
+  - --talk-name=org.a11y.Bus
+  - --talk-name=org.gtk.vfs.*
+  - --system-talk-name=org.freedesktop.NetworkManager
+  - --own-name=org.mpris.MediaPlayer2.firefox.*
+
+cleanup-commands:
+  - mkdir -p "${FLATPAK_DEST}/etc/firefox"
+
+modules:
+  - name: firefox-dev
+    buildsystem: simple
+    no-python-timestamp-fix: true
+    build-commands:
+      - mkdir -p "${FLATPAK_DEST}/lib"
+      - cp -a . "${FLATPAK_DEST}/lib/firefox"
+      - |
+        for size in 16 32 48 64 128; do
+          install -Dm644 \
+            "browser/chrome/icons/default/default${size}.png" \
+            "${FLATPAK_DEST}/share/icons/hicolor/${size}x${size}/apps/${FLATPAK_ID}.png"
+        done
+    sources:
+      - type: archive
+        url: https://download-installer.cdn.mozilla.net/pub/devedition/releases/154.0b2/linux-x86_64/en-US/firefox-154.0b2.tar.xz
+        sha256: 4008a397efae1ec0a057f84239ea58bbe6fcfa3c5cf7ca4c983afbdda3fa50a2
+        strip-components: 1
+        only-arches:
+          - x86_64
+        x-checker-data:
+          type: rotating-url
+          url: https://download.mozilla.org/?product=firefox-devedition-latest-ssl&os=linux64&lang=en-US
+          pattern: 'https://download-installer\.cdn\.mozilla\.net/pub/devedition/releases/([0-9]+(?:\.[0-9]+)*b[0-9]+)/linux-x86_64/en-US/firefox-[0-9]+(?:\.[0-9]+)*b[0-9]+\.tar\.xz'
+          is-main-source: true
+      - type: archive
+        url: https://download-installer.cdn.mozilla.net/pub/devedition/releases/154.0b2/linux-aarch64/en-US/firefox-154.0b2.tar.xz
+        sha256: 3630b0a17031c5d6db4b5e6773969d138f2fc7cfcf89a74088df4dbbadc97b4a
+        strip-components: 1
+        only-arches:
+          - aarch64
+        x-checker-data:
+          type: rotating-url
+          url: https://download.mozilla.org/?product=firefox-devedition-latest-ssl&os=linux64-aarch64&lang=en-US
+          pattern: 'https://download-installer\.cdn\.mozilla\.net/pub/devedition/releases/([0-9]+(?:\.[0-9]+)*b[0-9]+)/linux-aarch64/en-US/firefox-[0-9]+(?:\.[0-9]+)*b[0-9]+\.tar\.xz'
+
+  - name: language-packs
+    buildsystem: simple
+    build-commands:
+      - |
+        for langpack in langpacks/langpack-*@devedition.mozilla.org.xpi; do
+          [ -f "${langpack}" ] || continue
+
+          filename="${langpack##*/}"
+          locale="${filename#langpack-}"
+          locale="${locale%@devedition.mozilla.org.xpi}"
+          primary_language="${locale%%-*}"
+          locale_path="share/runtime/locale/${primary_language}/${filename}"
+
+          mkdir -p "${FLATPAK_DEST}/lib/firefox/distribution/extensions"
+          install -Dm644 "${langpack}" "${FLATPAK_DEST}/${locale_path}"
+          ln -s "/app/${locale_path}" \
+            "${FLATPAK_DEST}/lib/firefox/distribution/extensions/${filename}"
+        done
+    # Future devops preprocessing populates this list in its ephemeral workspace.
+    sources: []
+
+  - name: desktop-integration
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 firefox-dev "${FLATPAK_DEST}/bin/firefox-dev"
+      - install -Dm644 dev.piquark6046.Firefox.Dev.desktop "${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop"
+      - install -Dm644 dev.piquark6046.Firefox.Dev.metainfo.xml "${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml"
+    sources:
+      - type: file
+        path: files/firefox-dev
+      - type: file
+        path: files/dev.piquark6046.Firefox.Dev.desktop
+      - type: file
+        path: files/dev.piquark6046.Firefox.Dev.metainfo.xml

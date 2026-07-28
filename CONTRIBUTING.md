@@ -6,22 +6,22 @@ sandbox permissions, and repository metadata, so seemingly small changes can
 affect both security and installation behavior.
 
 Use root-relative paths in documentation, issues, and pull requests. For
-example, use `browsers/firefox-dev/FirefoxDev.yaml`, not only
-`FirefoxDev.yaml`.
+example, use `browsers/firefox/dev/dev.piquark6046.Firefox.Dev.yaml`, not only
+`dev.piquark6046.Firefox.Dev.yaml`.
 
 ## Repository Layout
 
-The repository is currently being bootstrapped. Add definitions using the
-following structure:
+Add definitions using the following nested browser-family and release-channel
+structure:
 
 | Path | Purpose |
 | --- | --- |
-| `browsers/<slug>/` | One browser or release channel. |
-| `browsers/<slug>/<app-id>.yaml` | Flatpak manifest, modules, permissions, sources, and `x-checker-data`. |
-| `browsers/<slug>/files/` | Desktop, AppStream, icon, service, search-provider, and distribution assets. |
-| `browsers/<slug>/generated-sources.json` | Checked-in baseline for generated source lists such as language packs. |
-| `browsers/<slug>/linter.json` | Narrow, reviewed Flatpak linter exceptions. |
-| `browsers/<slug>/*.flatpakref` | Installation reference targeting the Pages-hosted repository. |
+| `browsers/<browser>/<channel>/` | One browser release channel, such as `firefox/dev`. |
+| `browsers/<browser>/<channel>/<app-id>.yaml` | Flatpak manifest, modules, permissions, sources, and `x-checker-data`. |
+| `browsers/<browser>/<channel>/files/` | Desktop, AppStream, icon, service, search-provider, and distribution assets. |
+| `browsers/<browser>/<channel>/langpack.json` | Sorted language-code allowlist used to resolve checksum-pinned language packs ephemerally. |
+| `browsers/<browser>/<channel>/linter.json` | Narrow, reviewed Flatpak linter exceptions. |
+| `browsers/<browser>/<channel>/*.flatpakref` | Installation reference targeting the Pages-hosted repository. |
 | `.github/workflows/` | Definition checks, builds, and Pages deployment. |
 
 Directories such as `build/`, `.flatpak-builder/`, `repo/`, and temporary
@@ -50,7 +50,7 @@ assets, or automation still require review through a pull request.
 After a browser definition exists, use its real manifest path. For example:
 
 ```sh
-manifest_path=browsers/firefox-dev/FirefoxDev.yaml
+manifest_path=browsers/firefox/dev/dev.piquark6046.Firefox.Dev.yaml
 
 flatpak-builder --force-clean --user \
   --install-deps-from=flathub \
