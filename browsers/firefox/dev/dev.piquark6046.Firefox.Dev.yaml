@@ -97,7 +97,7 @@ modules:
           ln -s "/app/${locale_path}" \
             "${FLATPAK_DEST}/lib/firefox/distribution/extensions/${filename}"
         done
-    # Future devops preprocessing populates this list in its ephemeral workspace.
+    # DevOps preprocessing populates this list only in its ephemeral workspace.
     sources: []
 
   - name: desktop-integration

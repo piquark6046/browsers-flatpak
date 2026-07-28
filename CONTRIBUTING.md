@@ -64,19 +64,39 @@ available on the local host. Repository linting should apply the package's
 reviewed `linter.json` only where an exception is documented. GitHub Actions
 remain authoritative for architectures or signing steps unavailable locally.
 
+Install the JavaScript dependencies with the declared pnpm version and frozen
+lockfile, while continuing to use the repository's npm-script interface:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+npm run check
+```
+
+The pull-request workflow performs fast TypeScript, lint, test, and whitespace
+checks, then resolves and builds both the tracked Firefox revision and the live
+latest revision for `x86_64` and `aarch64`. When the revisions have the same
+output fingerprint, the build matrix deduplicates them.
+
 ## Automation and GitHub Pages
 
 Tracked definitions are stable inputs; published browser versions are derived
 outputs. Pull-request workflows validate the checked-in manifests and assets.
-A scheduled or manually dispatched publication workflow will:
+A scheduled, relevant-push, or manually dispatched publication workflow will:
 
 1. Check out the source revision without write credentials.
-2. Download upstream release metadata and patch URLs, checksums, and generated
-   source lists only in the runner workspace.
-3. Build each definition for its configured architectures, update and lint the
-   Flatpak repository, and sign it using protected Actions secrets.
-4. Upload the completed repository as a GitHub Pages artifact and deploy that
-   artifact with the Pages deployment environment.
+2. Resolve the product-details revision and both architecture redirects,
+   verify Mozilla's detached signatures on `SHA256SUMS` and `SHA512SUMS`, and
+   patch URLs, checksums, AppStream releases, and language sources only in the
+   runner workspace.
+3. Compare the derived output fingerprint with the signed
+   `publication-state.json`. An unchanged fingerprint skips publication.
+4. Build the selected definition natively for `x86_64` and `aarch64` into
+   separate unsigned repositories.
+5. In the protected `flatpak-signing` environment, import the verified build
+   repositories as new commits, sign commits and summary metadata, update and
+   lint the repository, and stage a link-free Pages artifact.
+6. Deploy that artifact from the separate `github-pages` environment.
 
 The workflow must never run `git commit` or `git push`, create a branch, open a
 pull request, or retain patched manifests as repository source. It must not
@@ -87,6 +107,63 @@ Keep workflow permissions minimal: source-checking jobs need read-only
 repository access, while only the deployment job receives the permissions
 required for Pages. Never print signing keys or passphrases to logs or include
 them in uploaded artifacts.
+
+The published site contains its landing page and installation reference at the
+site root, the Flatpak repository below `/repo/`, the repository public key,
+and signed publication state. The repository normally retains the current and
+previous commit for each ref and generates static deltas. If the staged site
+would exceed the 900 MiB project budget, automation removes the oldest history
+and deltas and retries with only current refs. It fails instead of removing the
+current revision.
+
+### Manual publication controls
+
+The `Publish resolved Flatpak repository` workflow supports four manual
+inputs:
+
+- `version` selects an exact Firefox Developer Edition beta. Omitting it uses
+  the consistent live-latest revision.
+- `force` rebuilds even when the signed output fingerprint is unchanged.
+- `allow_downgrade` permits an exact-version rollback. A downgrade otherwise
+  fails closed.
+- `bootstrap` permits the first deployment only when both publication-state
+  files are absent. It does not bypass malformed, incomplete, or
+  invalidly-signed state.
+
+Normal schedules and pushes cannot set these controls. Use exact-version
+rollback deliberately and restore a newer revision with another reviewed run
+when the rollback is no longer required.
+
+### Repository signing
+
+The repository uses an offline, non-expiring Ed25519 certification key and an
+Ed25519 CI signing subkey with a three-year expiry. Generate a new key set from
+a trusted local checkout:
+
+```sh
+npm run key:provision
+```
+
+The command refuses to overwrite an existing export directory. It writes
+private recovery exports, a revocation certificate, the protected CI subkey,
+and ready-to-store secret values under
+`.agents/temp/browsers-flatpak-signing-key/`. Move that directory to encrypted
+offline storage. Only these public outputs remain in the repository:
+
+- `devops/keys/browsers-flatpak-signing-key.asc`
+- `devops/keys/browsers-flatpak-signing-key.fingerprint`
+- `browsers/firefox/dev/dev.piquark6046.Firefox.Dev.flatpakref`
+
+Create a `flatpak-signing` GitHub environment restricted to the default branch
+and set `FLATPAK_GPG_SECRET_SUBKEY_B64` and `FLATPAK_GPG_PASSPHRASE` from
+`github-actions-secrets.env` as environment secrets. Never store the full
+primary secret key in GitHub. Provision and test a replacement CI signing
+subkey before the current subkey expires. During rotation, keep the preceding
+subkey in the public export and in the comma-separated `TrustedSigning` list
+until a state signed by the replacement has been deployed; `Signing` always
+names the active CI subkey. Changing the primary repository key also requires
+updating the public export and every installation reference as a separately
+reviewed trust migration.
 
 ## Commit Messages
 

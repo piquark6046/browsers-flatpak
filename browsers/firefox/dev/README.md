@@ -25,8 +25,8 @@ Software Releases key:
 
 `langpack.json` is a sorted `string[]` allowlist containing 102 language codes,
 excluding the bundled `en-US` locale. It intentionally contains no URLs,
-checksums, destination paths, or Flatpak source objects. Future devops
-preprocessing will resolve each code against Mozilla's signed `SHA512SUMS` and
+checksums, destination paths, or Flatpak source objects. DevOps preprocessing
+resolves each code against Mozilla's signed `SHA512SUMS` and
 inject checksum-pinned sources into the manifest's `language-packs` module.
 
 ## Payload invariant
@@ -73,7 +73,7 @@ Flatpak packaging.
 
 ## Publication contract
 
-Future publication automation may patch only ephemeral copies of these dynamic
+Publication automation may patch only ephemeral copies of these dynamic
 values:
 
 - Both archive URLs and SHA-256 hashes in
@@ -83,10 +83,16 @@ values:
   `langpack.json` with ephemeral URL, destination filename, and SHA-512 source
   objects.
 
-The automation must validate that both architectures use the same full beta
-revision and that every selected language pack matches it. It must not write
-patched values back to the repository. Pages publication, repository signing,
-and the installation reference are intentionally not defined here.
+The automation validates Mozilla's signed checksum files, requires both
+architecture redirects and product details to name the same full beta
+revision, and requires every selected language pack to match it. It never
+writes patched values back to the repository.
+
+The generated repository is signed with the public key embedded in
+`dev.piquark6046.Firefox.Dev.flatpakref` and published below `/repo/` on the
+project's GitHub Pages site. The accompanying signed `publication-state.json`
+records the exact output fingerprint, source revision, workflow run, retained
+history depth, and site size.
 
 Firefox, Firefox Developer Edition, and the Firefox logo are trademarks of
 Mozilla. See Mozilla's

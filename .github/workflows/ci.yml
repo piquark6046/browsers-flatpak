@@ -1,0 +1,135 @@
+name: Pull request validation
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pull-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Fast checks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out proposed source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate TypeScript and tests
+        run: npm run check
+      - name: Check whitespace
+        run: git diff --check
+
+  resolve:
+    name: Resolve tracked and live inputs
+    needs: quality
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+    steps:
+      - name: Check out proposed source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Resolve signed build inputs
+        id: resolve
+        run: |
+          npm run ci:upstream -- \
+            --command resolve \
+            --mode pr \
+            --output-directory "${RUNNER_TEMP}/resolution" \
+            --source-revision "${GITHUB_SHA}"
+      - name: Upload verified resolution
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pull-request-resolution
+          path: ${{ runner.temp }}/resolution
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+  build:
+    name: Build ${{ matrix.Variant }} ${{ matrix.Architecture }}
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    runs-on: ${{ matrix.Runner }}
+    container:
+      image: ${{ matrix.Image }}
+      options: --privileged
+    steps:
+      - name: Download verified resolution
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: pull-request-resolution
+          path: ${{ runner.temp }}/resolution
+      - name: Configure runtime source
+        run: |
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+      - name: Build and lint native repository
+        env:
+          ARCHITECTURE: ${{ matrix.Architecture }}
+          DEFINITION_DIRECTORY: ${{ runner.temp }}/resolution/${{ matrix.Variant }}/firefox/dev
+        run: |
+          manifest="${DEFINITION_DIRECTORY}/dev.piquark6046.Firefox.Dev.yaml"
+          flatpak-builder \
+            --arch="${ARCHITECTURE}" \
+            --collection-id=dev.piquark6046.Browsers \
+            --disable-rofiles-fuse \
+            --force-clean \
+            --install-deps-from=flathub \
+            --repo="${RUNNER_TEMP}/repo" \
+            "${RUNNER_TEMP}/build" \
+            "${manifest}"
+          flatpak-builder-lint \
+            --exceptions "${DEFINITION_DIRECTORY}/linter.json" \
+            manifest "${manifest}"
+          ostree --repo="${RUNNER_TEMP}/repo" fsck
+
+  flatpak-build-gate:
+    name: Flatpak build gate
+    if: always()
+    needs:
+      - quality
+      - resolve
+      - build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every pull request check
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          RESOLVE_RESULT: ${{ needs.resolve.result }}
+        run: |
+          test "${QUALITY_RESULT}" = success
+          test "${RESOLVE_RESULT}" = success
+          test "${BUILD_RESULT}" = success
+

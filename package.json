@@ -1,0 +1,33 @@
+{
+  "name": "@piquark6046/browsers-flatpak",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "ci:upstream": "node --import=tsx devops/index.ts",
+    "key:provision": "node --import=tsx devops/provision-signing-key.ts",
+    "lint": "tsc --noEmit && eslint .",
+    "test": "node --import=tsx --test devops/*.test.ts",
+    "check": "npm run lint && npm test"
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.0",
+    "@typescriptprime/parsing": "^2.0.1",
+    "@typescriptprime/securereq": "^2.0.0",
+    "yaml": "^2.9.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2",
+    "@typescript-eslint/eslint-plugin": "^8.58.0",
+    "@typescript-eslint/parser": "^8.58.0",
+    "eslint": "^10.2.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}
