@@ -142,11 +142,16 @@ jobs:
             --user-exceptions "${RUNNER_TEMP}/resolution/${{ matrix.Variant }}/firefox/dev/linter.json" \
             manifest "${MANIFEST}"
           ostree --repo="${RUNNER_TEMP}/export/repo" fsck
+          tar \
+            --create \
+            --file="${RUNNER_TEMP}/export/repo.tar" \
+            --directory="${RUNNER_TEMP}/export" \
+            repo
       - name: Upload unsigned native repository
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.ArtifactName }}
-          path: ${{ runner.temp }}/export
+          path: ${{ runner.temp }}/export/repo.tar
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 2
@@ -188,6 +193,19 @@ jobs:
         with:
           pattern: production-firefox-dev-*
           path: ${{ runner.temp }}/build-artifacts
+      - name: Restore native repositories
+        run: |
+          for architecture in x86_64 aarch64; do
+            artifact_directory="${RUNNER_TEMP}/build-artifacts/production-firefox-dev-${architecture}"
+            archive="${artifact_directory}/repo.tar"
+            test -f "${archive}"
+            tar \
+              --extract \
+              --file="${archive}" \
+              --directory="${artifact_directory}" \
+              --no-same-owner
+            ostree --repo="${artifact_directory}/repo" fsck
+          done
       - name: Assemble and sign publication
         env:
           FLATPAK_GPG_PASSPHRASE: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
