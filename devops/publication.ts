@@ -261,6 +261,7 @@ async function UpdateRepository(
   ], { Environment: Signing.Environment })
   await RunCommand('flatpak-builder-lint', [
     '--exceptions',
+    '--user-exceptions',
     FirefoxLinterPath,
     'repo',
     RepositoryPath,

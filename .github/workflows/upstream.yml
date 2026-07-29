@@ -138,7 +138,8 @@ jobs:
             "${RUNNER_TEMP}/build" \
             "${MANIFEST}"
           flatpak-builder-lint \
-            --exceptions "${RUNNER_TEMP}/resolution/${{ matrix.Variant }}/firefox/dev/linter.json" \
+            --exceptions \
+            --user-exceptions "${RUNNER_TEMP}/resolution/${{ matrix.Variant }}/firefox/dev/linter.json" \
             manifest "${MANIFEST}"
           ostree --repo="${RUNNER_TEMP}/export/repo" fsck
       - name: Upload unsigned native repository
@@ -221,4 +222,3 @@ jobs:
       - name: Deploy signed artifact
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
-

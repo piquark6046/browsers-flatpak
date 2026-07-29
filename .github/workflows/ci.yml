@@ -110,7 +110,8 @@ jobs:
             "${RUNNER_TEMP}/build" \
             "${manifest}"
           flatpak-builder-lint \
-            --exceptions "${DEFINITION_DIRECTORY}/linter.json" \
+            --exceptions \
+            --user-exceptions "${DEFINITION_DIRECTORY}/linter.json" \
             manifest "${manifest}"
           ostree --repo="${RUNNER_TEMP}/repo" fsck
 
@@ -132,4 +133,3 @@ jobs:
           test "${QUALITY_RESULT}" = success
           test "${RESOLVE_RESULT}" = success
           test "${BUILD_RESULT}" = success
-
