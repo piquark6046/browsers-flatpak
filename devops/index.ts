@@ -4,6 +4,7 @@ import {
   ParseArgumentsAndOptions,
 } from '@typescriptprime/parsing'
 import { z } from 'zod'
+import { CloseNetworkClient } from './network.js'
 import { FinalizePublication } from './publication.js'
 import { ResolveDefinitions } from './upstream.js'
 
@@ -112,4 +113,6 @@ Main().catch((CatchValue: unknown) => {
       : String(CatchValue),
   )
   process.exitCode = 1
+}).finally(() => {
+  CloseNetworkClient()
 })
