@@ -1,0 +1,8 @@
+{
+  "dev.piquark6046.Firefox.Nightly": [
+    "appid-url-not-reachable",
+    "appstream-screenshots-not-mirrored-in-ostree",
+    "finish-args-unnecessary-xdg-config-gtk-3.0-ro-access",
+    "metainfo-missing-screenshots"
+  ]
+}

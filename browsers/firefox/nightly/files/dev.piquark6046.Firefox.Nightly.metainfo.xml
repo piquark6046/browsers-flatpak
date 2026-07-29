@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.piquark6046.Firefox.Nightly</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+
+  <name>Firefox Nightly</name>
+  <summary>Preview and test the latest Firefox features</summary>
+
+  <description>
+    <p>
+      Firefox Nightly is Mozilla's frequently updated preview browser for
+      testing features and fixes before they reach stable Firefox releases.
+    </p>
+    <p>
+      This package redistributes Mozilla's unmodified Nightly binary. The
+      Flatpak packaging and repository are maintained independently and are
+      not supported by Mozilla.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">dev.piquark6046.Firefox.Nightly.desktop</launchable>
+  <provides>
+    <binary>firefox-nightly</binary>
+    <mediatype>text/html</mediatype>
+    <mediatype>application/xhtml+xml</mediatype>
+    <mediatype>x-scheme-handler/http</mediatype>
+    <mediatype>x-scheme-handler/https</mediatype>
+  </provides>
+
+  <developer id="mozilla.org">
+    <name>Mozilla</name>
+  </developer>
+
+  <url type="homepage">https://www.mozilla.org/firefox/channel/desktop/#nightly</url>
+  <url type="bugtracker">https://github.com/piquark6046/browsers-flatpak/issues</url>
+  <url type="help">https://support.mozilla.org/products/firefox</url>
+  <url type="donation">https://foundation.mozilla.org/?form=donate</url>
+  <url type="translate">https://pontoon.mozilla.org/projects/firefox/</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="155.0a1" date="2026-07-28"/>
+  </releases>
+</component>

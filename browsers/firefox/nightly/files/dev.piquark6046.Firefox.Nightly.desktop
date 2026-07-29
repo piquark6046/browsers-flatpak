@@ -1,0 +1,28 @@
+[Desktop Entry]
+Version=1.0
+Name=Firefox Nightly
+GenericName=Web Browser
+Comment=Test the latest Firefox features and fixes
+Keywords=Internet;WWW;Browser;Web;Explorer;Nightly;
+Exec=firefox-nightly %u
+Icon=dev.piquark6046.Firefox.Nightly
+Terminal=false
+Type=Application
+MimeType=text/html;text/xml;application/xhtml+xml;application/vnd.mozilla.xul+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+StartupWMClass=dev.piquark6046.Firefox.Nightly
+Categories=Network;WebBrowser;
+Actions=new-window;new-private-window;profile-manager;
+X-GNOME-UsesNotifications=true
+
+[Desktop Action new-window]
+Name=Open a New Window
+Exec=firefox-nightly --new-window
+
+[Desktop Action new-private-window]
+Name=Open a New Private Window
+Exec=firefox-nightly --private-window
+
+[Desktop Action profile-manager]
+Name=Open the Profile Manager
+Exec=firefox-nightly --ProfileManager

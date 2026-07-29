@@ -1,0 +1,115 @@
+id: dev.piquark6046.Firefox.Nightly
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+base: org.mozilla.firefox.BaseApp
+base-version: '25.08'
+command: firefox-nightly
+separate-locales: true
+
+build-options:
+  no-debuginfo: true
+  strip: false
+
+add-extensions:
+  dev.piquark6046.Firefox.Nightly.systemconfig:
+    directory: etc/firefox
+    no-autodownload: true
+
+finish-args:
+  - --require-version=0.11.1
+  - --allow=devel
+  - --device=all
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --socket=pcsc
+  - --socket=cups
+  - --persist=.mozilla
+  - --env=DICPATH=/usr/share/hunspell
+  - --env=MOZ_APP_REMOTINGNAME=dev.piquark6046.Firefox.Nightly
+  - --filesystem=xdg-config/gtk-3.0:ro
+  - --filesystem=xdg-download:rw
+  - --filesystem=/run/.heim_org.h5l.kcm-socket
+  - --filesystem=xdg-run/speech-dispatcher:ro
+  - --talk-name=org.freedesktop.FileManager1
+  - --talk-name=org.a11y.Bus
+  - --talk-name=org.gtk.vfs.*
+  - --system-talk-name=org.freedesktop.NetworkManager
+  - --own-name=org.mpris.MediaPlayer2.firefox.*
+
+cleanup-commands:
+  - mkdir -p "${FLATPAK_DEST}/etc/firefox"
+
+modules:
+  - name: firefox-nightly
+    buildsystem: simple
+    no-python-timestamp-fix: true
+    build-commands:
+      - mkdir -p "${FLATPAK_DEST}/lib"
+      - cp -a . "${FLATPAK_DEST}/lib/firefox"
+      - |
+        for size in 16 32 48 64 128; do
+          install -Dm644 \
+            "browser/chrome/icons/default/default${size}.png" \
+            "${FLATPAK_DEST}/share/icons/hicolor/${size}x${size}/apps/${FLATPAK_ID}.png"
+        done
+    sources:
+      - type: archive
+        url: https://archive.mozilla.org/pub/firefox/nightly/2026/07/2026-07-28-21-43-28-mozilla-central/firefox-155.0a1.en-US.linux-x86_64.tar.xz
+        sha256: 282c556d1dcfe0ca20cb82f6d07281b0d08ee9ded614cec002b4009c4a2f6946
+        strip-components: 1
+        only-arches:
+          - x86_64
+        x-checker-data:
+          type: rotating-url
+          url: https://download.mozilla.org/?product=firefox-nightly-latest-ssl&os=linux64&lang=en-US
+          pattern: 'https://download-installer\.cdn\.mozilla\.net/pub/firefox/nightly/latest-mozilla-central/firefox-([0-9]+(?:\.[0-9]+)*a[0-9]+)\.en-US\.linux-x86_64\.tar\.xz'
+          is-main-source: true
+      - type: archive
+        url: https://archive.mozilla.org/pub/firefox/nightly/2026/07/2026-07-28-21-43-28-mozilla-central/firefox-155.0a1.en-US.linux-aarch64.tar.xz
+        sha256: 0dbc90109c88b99458040783774f08fc3c4615c69de7f748392e77c6ae83765a
+        strip-components: 1
+        only-arches:
+          - aarch64
+        x-checker-data:
+          type: rotating-url
+          url: https://download.mozilla.org/?product=firefox-nightly-latest-ssl&os=linux64-aarch64&lang=en-US
+          pattern: 'https://download-installer\.cdn\.mozilla\.net/pub/firefox/nightly/latest-mozilla-central/firefox-([0-9]+(?:\.[0-9]+)*a[0-9]+)\.en-US\.linux-aarch64\.tar\.xz'
+
+  - name: language-packs
+    buildsystem: simple
+    build-commands:
+      - |
+        for langpack in langpacks/langpack-*@firefox.mozilla.org.xpi; do
+          [ -f "${langpack}" ] || continue
+
+          filename="${langpack##*/}"
+          locale="${filename#langpack-}"
+          locale="${locale%@firefox.mozilla.org.xpi}"
+          primary_language="${locale%%-*}"
+          locale_path="share/runtime/locale/${primary_language}/${filename}"
+
+          mkdir -p "${FLATPAK_DEST}/lib/firefox/distribution/extensions"
+          install -Dm644 "${langpack}" "${FLATPAK_DEST}/${locale_path}"
+          ln -s "/app/${locale_path}" \
+            "${FLATPAK_DEST}/lib/firefox/distribution/extensions/${filename}"
+        done
+    # DevOps preprocessing populates this list only in its ephemeral workspace.
+    sources: []
+
+  - name: desktop-integration
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 firefox-nightly "${FLATPAK_DEST}/bin/firefox-nightly"
+      - install -Dm644 dev.piquark6046.Firefox.Nightly.desktop "${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop"
+      - install -Dm644 dev.piquark6046.Firefox.Nightly.metainfo.xml "${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml"
+    sources:
+      - type: file
+        path: files/firefox-nightly
+      - type: file
+        path: files/dev.piquark6046.Firefox.Nightly.desktop
+      - type: file
+        path: files/dev.piquark6046.Firefox.Nightly.metainfo.xml
