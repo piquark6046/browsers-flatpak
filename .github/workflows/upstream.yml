@@ -207,13 +207,10 @@ jobs:
           path: ${{ runner.temp }}/build-artifacts
       - name: Restore native repositories
         run: |
-          find "${RUNNER_TEMP}/build-artifacts" \
-            -mindepth 1 \
-            -maxdepth 1 \
-            -type d \
-            -name 'production-*' \
-            -print0 |
-          while IFS= read -r -d '' artifact_directory; do
+          restored=0
+          for artifact_directory in \
+            "${RUNNER_TEMP}"/build-artifacts/production-*; do
+            test -d "${artifact_directory}"
             archive="${artifact_directory}/repo.tar"
             test -f "${archive}"
             tar \
@@ -222,7 +219,9 @@ jobs:
               --directory="${artifact_directory}" \
               --no-same-owner
             ostree --repo="${artifact_directory}/repo" fsck
+            restored=$((restored + 1))
           done
+          test "${restored}" -gt 0
       - name: Assemble and sign publication
         env:
           FLATPAK_GPG_PASSPHRASE: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
