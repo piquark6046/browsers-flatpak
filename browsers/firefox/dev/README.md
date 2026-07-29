@@ -66,10 +66,12 @@ explicit because several are broad:
 optional administrator-supplied configuration. No policy is bundled and the
 extension is not downloaded automatically.
 
-`linter.json` records two reviewed exceptions. The requested application-ID
+`linter.json` records four reviewed exceptions. The requested application-ID
 domain, `https://piquark6046.dev`, is not currently published, and the
 read-only GTK configuration permission intentionally follows Mozilla's Firefox
-Flatpak packaging.
+Flatpak packaging. The package does not currently include screenshots, and
+this independent Pages repository does not publish screenshot media through
+Flathub's `dl.flathub.org` mirror.
 
 ## Publication contract
 
