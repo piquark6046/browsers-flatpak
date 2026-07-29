@@ -103,6 +103,7 @@ jobs:
           flatpak-builder \
             --arch="${ARCHITECTURE}" \
             --collection-id=dev.piquark6046.Browsers \
+            --default-branch=stable \
             --disable-rofiles-fuse \
             --force-clean \
             --install-deps-from=flathub \
