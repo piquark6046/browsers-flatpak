@@ -103,7 +103,7 @@ jobs:
       - name: Upload verified resolution
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: production-resolution
+          name: verified-production-resolution
           path: ${{ runner.temp }}/resolution
           if-no-files-found: error
           include-hidden-files: true
@@ -124,7 +124,7 @@ jobs:
       - name: Download verified resolution
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          name: production-resolution
+          name: verified-production-resolution
           path: ${{ runner.temp }}/resolution
       - name: Configure runtime source
         run: |
@@ -198,7 +198,7 @@ jobs:
       - name: Download verified resolution
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          name: production-resolution
+          name: verified-production-resolution
           path: ${{ runner.temp }}/resolution
       - name: Download native repositories
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
