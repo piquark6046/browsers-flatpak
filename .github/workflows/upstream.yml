@@ -21,6 +21,10 @@ on:
         description: Exact Firefox Developer Edition beta to publish
         required: false
         type: string
+      nightly_build_id:
+        description: Exact 14-digit Firefox Nightly build ID to publish
+        required: false
+        type: string
       force:
         description: Rebuild even when the signed output fingerprint is unchanged
         default: false
@@ -75,6 +79,7 @@ jobs:
           ALLOW_DOWNGRADE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_downgrade || false }}
           BOOTSTRAP: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap || false }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force || false }}
+          NIGHTLY_BUILD_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.nightly_build_id || '' }}
           OUTPUT_DIRECTORY: ${{ runner.temp }}/resolution
           SOURCE_REVISION: ${{ github.sha }}
           VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
@@ -91,6 +96,9 @@ jobs:
           if [ -n "${VERSION}" ]; then
             arguments+=(--version "${VERSION}")
           fi
+          if [ -n "${NIGHTLY_BUILD_ID}" ]; then
+            arguments+=(--nightly-build-id "${NIGHTLY_BUILD_ID}")
+          fi
           npm run ci:upstream -- "${arguments[@]}"
       - name: Upload verified resolution
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -102,7 +110,7 @@ jobs:
           retention-days: 7
 
   build:
-    name: Build ${{ matrix.Variant }} ${{ matrix.Architecture }}
+    name: Build ${{ matrix.Variant }} ${{ matrix.Definition }} ${{ matrix.Architecture }}
     needs: resolve
     if: needs.resolve.outputs.should-publish == 'true'
     strategy:
@@ -125,8 +133,11 @@ jobs:
       - name: Build unsigned native repository
         env:
           ARCHITECTURE: ${{ matrix.Architecture }}
-          MANIFEST: ${{ runner.temp }}/resolution/${{ matrix.Variant }}/firefox/dev/dev.piquark6046.Firefox.Dev.yaml
+          LINTER: ${{ runner.temp }}/resolution/${{ matrix.LinterPath }}
+          MANIFEST: ${{ runner.temp }}/resolution/${{ matrix.ManifestPath }}
         run: |
+          test -f "${LINTER}"
+          test -f "${MANIFEST}"
           mkdir -p "${RUNNER_TEMP}/export"
           flatpak-builder \
             --arch="${ARCHITECTURE}" \
@@ -140,7 +151,7 @@ jobs:
             "${MANIFEST}"
           flatpak-builder-lint \
             --exceptions \
-            --user-exceptions "${RUNNER_TEMP}/resolution/${{ matrix.Variant }}/firefox/dev/linter.json" \
+            --user-exceptions "${LINTER}" \
             manifest "${MANIFEST}"
           ostree --repo="${RUNNER_TEMP}/export/repo" fsck
           tar \
@@ -192,12 +203,17 @@ jobs:
       - name: Download native repositories
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          pattern: production-firefox-dev-*
+          pattern: production-*
           path: ${{ runner.temp }}/build-artifacts
       - name: Restore native repositories
         run: |
-          for architecture in x86_64 aarch64; do
-            artifact_directory="${RUNNER_TEMP}/build-artifacts/production-firefox-dev-${architecture}"
+          find "${RUNNER_TEMP}/build-artifacts" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d \
+            -name 'production-*' \
+            -print0 |
+          while IFS= read -r -d '' artifact_directory; do
             archive="${artifact_directory}/repo.tar"
             test -f "${archive}"
             tar \

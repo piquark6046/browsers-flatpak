@@ -47,10 +47,12 @@ assets, or automation still require review through a pull request.
 
 ## Local Build and Validation
 
-After a browser definition exists, use its real manifest path. For example:
+After a browser definition exists, use its real manifest path. For example,
+select either the Developer Edition or Nightly definition:
 
 ```sh
 manifest_path=browsers/firefox/dev/dev.piquark6046.Firefox.Dev.yaml
+# manifest_path=browsers/firefox/nightly/dev.piquark6046.Firefox.Nightly.yaml
 
 flatpak-builder --force-clean --user \
   --install-deps-from=flathub \
@@ -74,9 +76,10 @@ npm run check
 ```
 
 The pull-request workflow performs fast TypeScript, lint, test, and whitespace
-checks, then resolves and builds both the tracked Firefox revision and the live
-latest revision for `x86_64` and `aarch64`. When the revisions have the same
-output fingerprint, the build matrix deduplicates them.
+checks. It then resolves and builds the tracked and live-latest revisions of
+both Firefox Developer Edition and Firefox Nightly for `x86_64` and `aarch64`.
+When a channel's revisions have the same output fingerprint, the build matrix
+deduplicates them.
 
 ## Automation and GitHub Pages
 
@@ -85,18 +88,22 @@ outputs. Pull-request workflows validate the checked-in manifests and assets.
 A scheduled, relevant-push, or manually dispatched publication workflow will:
 
 1. Check out the source revision without write credentials.
-2. Resolve the product-details revision and both architecture redirects,
+2. Resolve Developer Edition from product details and architecture redirects,
    verify Mozilla's detached signatures on `SHA256SUMS` and `SHA512SUMS`, and
-   patch URLs, checksums, AppStream releases, and language sources only in the
+   resolve Nightly from Buildhub and immutable archive directories. Nightly
+   archives are checked against archive-directory checksum files and verified
+   with their detached signatures. Language-pack checksums come from the
+   corresponding immutable release or build directory.
+3. Patch URLs, checksums, AppStream releases, and language sources only in the
    runner workspace.
-3. Compare the derived output fingerprint with the signed
+4. Compare each derived output fingerprint with the signed
    `publication-state.json`. An unchanged fingerprint skips publication.
-4. Build the selected definition natively for `x86_64` and `aarch64` into
+5. Build each changed definition natively for `x86_64` and `aarch64` into
    separate unsigned repositories.
-5. In the protected `flatpak-signing` environment, import the verified build
+6. In the protected `flatpak-signing` environment, import the verified build
    repositories as new commits, sign commits and summary metadata, update and
    lint the repository, and stage a link-free Pages artifact.
-6. Deploy that artifact from the separate `github-pages` environment.
+7. Deploy that artifact from the separate `github-pages` environment.
 
 The workflow must never run `git commit` or `git push`, create a branch, open a
 pull request, or retain patched manifests as repository source. It must not
@@ -108,31 +115,33 @@ repository access, while only the deployment job receives the permissions
 required for Pages. Never print signing keys or passphrases to logs or include
 them in uploaded artifacts.
 
-The published site contains its landing page and installation reference at the
-site root, the Flatpak repository below `/repo/`, the repository public key,
-and signed publication state. The repository normally retains the current and
-previous commit for each ref and generates static deltas. If the staged site
-would exceed the 900 MiB project budget, automation removes the oldest history
-and deltas and retries with only current refs. It fails instead of removing the
-current revision.
+The published site contains its landing page and both channel installation
+references at the site root, the Flatpak repository below `/repo/`, the
+repository public key, and signed publication state. The repository normally
+retains the current and previous commit for each ref and generates static
+deltas. If the staged site would exceed the 900 MiB project budget, automation
+removes the oldest history and deltas and retries with only current refs. It
+fails instead of removing the current revision.
 
 ### Manual publication controls
 
-The `Publish resolved Flatpak repository` workflow supports four manual
+The `Publish resolved Flatpak repository` workflow supports five manual
 inputs:
 
 - `version` selects an exact Firefox Developer Edition beta. Omitting it uses
   the consistent live-latest revision.
+- `nightly_build_id` selects an exact 14-digit Firefox Nightly build ID.
+  Omitting it uses the consistent live-latest mozilla-central build.
 - `force` rebuilds even when the signed output fingerprint is unchanged.
-- `allow_downgrade` permits an exact-version rollback. A downgrade otherwise
-  fails closed.
+- `allow_downgrade` permits an exact-version or build-ID rollback. A downgrade
+  otherwise fails closed.
 - `bootstrap` permits the first deployment only when both publication-state
   files are absent. It does not bypass malformed, incomplete, or
   invalidly-signed state.
 
-Normal schedules and pushes cannot set these controls. Use exact-version
-rollback deliberately and restore a newer revision with another reviewed run
-when the rollback is no longer required.
+Normal schedules and pushes cannot set these controls. Use exact-version or
+exact-build rollback deliberately and restore a newer revision with another
+reviewed run when the rollback is no longer required.
 
 ### Repository signing
 
@@ -153,6 +162,7 @@ offline storage. Only these public outputs remain in the repository:
 - `devops/keys/browsers-flatpak-signing-key.asc`
 - `devops/keys/browsers-flatpak-signing-key.fingerprint`
 - `browsers/firefox/dev/dev.piquark6046.Firefox.Dev.flatpakref`
+- `browsers/firefox/nightly/dev.piquark6046.Firefox.Nightly.flatpakref`
 
 Create a `flatpak-signing` GitHub environment restricted to the default branch
 and set `FLATPAK_GPG_SECRET_SUBKEY_B64` and `FLATPAK_GPG_PASSPHRASE` from

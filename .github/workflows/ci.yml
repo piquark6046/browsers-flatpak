@@ -75,7 +75,7 @@ jobs:
           retention-days: 7
 
   build:
-    name: Build ${{ matrix.Variant }} ${{ matrix.Architecture }}
+    name: Build ${{ matrix.Variant }} ${{ matrix.Definition }} ${{ matrix.Architecture }}
     needs: resolve
     strategy:
       fail-fast: false
@@ -97,9 +97,13 @@ jobs:
       - name: Build and lint native repository
         env:
           ARCHITECTURE: ${{ matrix.Architecture }}
-          DEFINITION_DIRECTORY: ${{ runner.temp }}/resolution/${{ matrix.Variant }}/firefox/dev
+          DEFINITION_DIRECTORY: ${{ runner.temp }}/resolution/${{ matrix.DefinitionPath }}
+          LINTER: ${{ runner.temp }}/resolution/${{ matrix.LinterPath }}
+          MANIFEST: ${{ runner.temp }}/resolution/${{ matrix.ManifestPath }}
         run: |
-          manifest="${DEFINITION_DIRECTORY}/dev.piquark6046.Firefox.Dev.yaml"
+          test -d "${DEFINITION_DIRECTORY}"
+          test -f "${LINTER}"
+          test -f "${MANIFEST}"
           flatpak-builder \
             --arch="${ARCHITECTURE}" \
             --collection-id=dev.piquark6046.Browsers \
@@ -109,11 +113,11 @@ jobs:
             --install-deps-from=flathub \
             --repo="${RUNNER_TEMP}/repo" \
             "${RUNNER_TEMP}/build" \
-            "${manifest}"
+            "${MANIFEST}"
           flatpak-builder-lint \
             --exceptions \
-            --user-exceptions "${DEFINITION_DIRECTORY}/linter.json" \
-            manifest "${manifest}"
+            --user-exceptions "${LINTER}" \
+            manifest "${MANIFEST}"
           ostree --repo="${RUNNER_TEMP}/repo" fsck
 
   flatpak-build-gate:
