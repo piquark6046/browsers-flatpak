@@ -16,7 +16,7 @@ import {
 } from '@typescriptprime/parsing'
 import { z } from 'zod'
 import {
-  FirefoxFlatpakRefPath,
+  DefinitionConfigurations,
   RepositoryFingerprintPath,
   RepositoryPublicKeyPath,
   RepositoryRoot,
@@ -227,7 +227,11 @@ async function Main(): Promise<void> {
       PublicKeyExportPath,
     ], { Redactions })
     const PublicKeyBase64 = (await readFile(BinaryPublicKeyPath)).toString('base64')
-    await writeFile(FirefoxFlatpakRefPath, FlatpakRef(PublicKeyBase64))
+    await Promise.all(DefinitionConfigurations.map(async (Configuration) =>
+      await writeFile(
+        Configuration.FlatpakRefPath,
+        FlatpakRef(PublicKeyBase64, Configuration),
+      )))
     await rm(BinaryPublicKeyPath, { force: true })
 
     process.stdout.write(

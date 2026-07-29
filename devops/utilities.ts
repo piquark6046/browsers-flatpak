@@ -13,7 +13,11 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
-import { BetaVersionSchema, FingerprintSchema } from './contracts.js'
+import {
+  BetaVersionSchema,
+  FingerprintSchema,
+  NightlyBuildIdSchema,
+} from './contracts.js'
 
 type TJsonPrimitive = boolean | number | string | null
 export type TJsonValue = TJsonPrimitive | TJsonValue[] | { [Key: string]: TJsonValue }
@@ -201,6 +205,12 @@ export function CompareBetaVersions(Left: string, Right: string): number {
   return Math.sign(LeftParsed.Beta - RightParsed.Beta)
 }
 
+export function CompareNightlyBuildIds(Left: string, Right: string): number {
+  NightlyBuildIdSchema.parse(Left)
+  NightlyBuildIdSchema.parse(Right)
+  return Math.sign(Left.localeCompare(Right))
+}
+
 export async function ReadFingerprintFile(
   FingerprintPath: string,
 ): Promise<{ Primary: string, Signing: string, TrustedSigning: string[] }> {
@@ -224,23 +234,19 @@ export async function ReadFingerprintFile(
   return { Primary: FingerprintSchema.parse(Values.Primary), Signing, TrustedSigning }
 }
 
-export async function VerifyDetachedSignature(
-  Data: string | Uint8Array,
-  Signature: string | Uint8Array,
+async function VerifyDetachedPaths(
+  DataPath: string,
+  SignaturePath: string,
   PublicKeyPath: string,
   ExpectedPrimaryFingerprint: string,
   ExpectedSigningFingerprints: string | readonly string[],
 ): Promise<void> {
   const TemporaryDirectory = await mkdtemp(join(tmpdir(), 'browsers-flatpak-verify-'))
   const GnuPgHome = join(TemporaryDirectory, 'gnupg')
-  const DataPath = join(TemporaryDirectory, 'signed-data')
-  const SignaturePath = join(TemporaryDirectory, 'signed-data.asc')
   await mkdir(GnuPgHome, { recursive: true })
   await chmod(GnuPgHome, 0o700)
 
   try {
-    await writeFile(DataPath, Data)
-    await writeFile(SignaturePath, Signature)
     await RunCommand('gpg', [
       '--batch',
       '--homedir',
@@ -280,6 +286,54 @@ export async function VerifyDetachedSignature(
         + `primary=${PrimaryFingerprint ?? 'missing'}`,
       )
     }
+  } finally {
+    await rm(TemporaryDirectory, { recursive: true, force: true })
+  }
+}
+
+export async function VerifyDetachedSignature(
+  Data: string | Uint8Array,
+  Signature: string | Uint8Array,
+  PublicKeyPath: string,
+  ExpectedPrimaryFingerprint: string,
+  ExpectedSigningFingerprints: string | readonly string[],
+): Promise<void> {
+  const TemporaryDirectory = await mkdtemp(join(tmpdir(), 'browsers-flatpak-data-'))
+  const DataPath = join(TemporaryDirectory, 'signed-data')
+  const SignaturePath = join(TemporaryDirectory, 'signed-data.asc')
+  try {
+    await writeFile(DataPath, Data)
+    await writeFile(SignaturePath, Signature)
+    await VerifyDetachedPaths(
+      DataPath,
+      SignaturePath,
+      PublicKeyPath,
+      ExpectedPrimaryFingerprint,
+      ExpectedSigningFingerprints,
+    )
+  } finally {
+    await rm(TemporaryDirectory, { recursive: true, force: true })
+  }
+}
+
+export async function VerifyDetachedFileSignature(
+  DataPath: string,
+  Signature: string | Uint8Array,
+  PublicKeyPath: string,
+  ExpectedPrimaryFingerprint: string,
+  ExpectedSigningFingerprints: string | readonly string[],
+): Promise<void> {
+  const TemporaryDirectory = await mkdtemp(join(tmpdir(), 'browsers-flatpak-signature-'))
+  const SignaturePath = join(TemporaryDirectory, 'signed-data.asc')
+  try {
+    await writeFile(SignaturePath, Signature)
+    await VerifyDetachedPaths(
+      DataPath,
+      SignaturePath,
+      PublicKeyPath,
+      ExpectedPrimaryFingerprint,
+      ExpectedSigningFingerprints,
+    )
   } finally {
     await rm(TemporaryDirectory, { recursive: true, force: true })
   }

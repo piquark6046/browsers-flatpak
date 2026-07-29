@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, mock, test } from 'node:test'
 import { SimpleSecureReq } from '@typescriptprime/securereq'
-import { CloseNetworkClient, Request } from './network.js'
+import { CloseNetworkClient, DownloadFile, Request } from './network.js'
 
 interface IRequestOptions {
   PreferredProtocol?: string
@@ -131,4 +134,34 @@ test('redirect allowlisting and explicit client cleanup remain enforced', async 
 
   CloseNetworkClient()
   assert.equal(Closes, 1)
+})
+
+test('bounded binary downloads hash exact bytes and reject oversized bodies', async () => {
+  const Directory = await mkdtemp(join(tmpdir(), 'browsers-flatpak-network-test-'))
+  const Destination = join(Directory, 'download')
+  try {
+    mock.method(globalThis, 'fetch', async () => new globalThis.Response('nightly-bytes', {
+      headers: { 'content-length': '13' },
+      status: 200,
+    }))
+    const Result = await DownloadFile(TestUrl, Destination, 32)
+    assert.equal(Result.Bytes, 13)
+    assert.equal(await readFile(Destination, 'utf8'), 'nightly-bytes')
+    assert.equal(
+      Result.Sha256,
+      'b3edfbfd68331f22efb6f1502f8c348e385ebd2556bd00bd6a5797bfef71f44e',
+    )
+
+    mock.restoreAll()
+    mock.method(globalThis, 'fetch', async () => new globalThis.Response('too large', {
+      headers: { 'content-length': '99' },
+      status: 200,
+    }))
+    await assert.rejects(
+      DownloadFile(TestUrl, Destination, 8),
+      /Download from .* failed after 1 attempt: Error/u,
+    )
+  } finally {
+    await rm(Directory, { recursive: true, force: true })
+  }
 })

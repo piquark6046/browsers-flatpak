@@ -1,9 +1,12 @@
 import { z } from 'zod'
 
-export const SchemaVersion = 1
+export const SchemaVersion = 2
+export const LegacySchemaVersion = 1
 export const RepositoryName = 'piquark6046/browsers-flatpak'
-export const DefinitionName = 'firefox/dev'
-export const AppId = 'dev.piquark6046.Firefox.Dev'
+export const DeveloperDefinitionName = 'firefox/dev'
+export const NightlyDefinitionName = 'firefox/nightly'
+export const DeveloperAppId = 'dev.piquark6046.Firefox.Dev'
+export const NightlyAppId = 'dev.piquark6046.Firefox.Nightly'
 export const FlatpakBranch = 'stable'
 export const CollectionId = 'dev.piquark6046.Browsers'
 export const SuggestedRemoteName = 'browsers-flatpak'
@@ -27,7 +30,20 @@ export const BuildImageByArchitecture: Readonly<Record<TArchitecture, string>> =
   aarch64: 'ghcr.io/flathub-infra/flatpak-github-actions@sha256:e3c5b58822c171715d147b43a140c7cc9848fa2e605490a5bc8bd65e3b6069a1',
 }
 
+export const DefinitionNameSchema = z.enum([
+  DeveloperDefinitionName,
+  NightlyDefinitionName,
+])
+export type TDefinitionName = z.infer<typeof DefinitionNameSchema>
+
+export const AppIdSchema = z.enum([DeveloperAppId, NightlyAppId])
+export type TAppId = z.infer<typeof AppIdSchema>
+
 export const BetaVersionSchema = z.string().regex(/^[0-9]+(?:\.[0-9]+)*b[0-9]+$/u)
+export const NightlyVersionSchema = z.string().regex(/^[0-9]+(?:\.[0-9]+)*a[0-9]+$/u)
+export const FirefoxVersionSchema = z.union([BetaVersionSchema, NightlyVersionSchema])
+export const NightlyBuildIdSchema = z.string().regex(/^[0-9]{14}$/u)
+export const MozillaSourceRevisionSchema = z.string().regex(/^[a-f0-9]{40}$/u)
 export const IsoDateSchema = z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/u)
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u)
 export const Sha512Schema = z.string().regex(/^[a-f0-9]{128}$/u)
@@ -48,45 +64,83 @@ export const ArchitectureResolutionSchema = z.object({
   LanguagePacks: z.array(LanguagePackSourceSchema),
 })
 
-export const DefinitionResolutionSchema = z.object({
+const ResolutionCommonShape = {
   Variant: z.enum(['production', 'tracked', 'latest']),
-  Definition: z.literal(DefinitionName),
-  AppId: z.literal(AppId),
   Branch: z.literal(FlatpakBranch),
-  Version: BetaVersionSchema,
   ReleaseDate: IsoDateSchema,
   Fingerprint: Sha256Schema,
   PatchedDefinitionPath: z.string().min(1),
   ManifestPath: z.string().min(1),
+  LinterPath: z.string().min(1),
   Architectures: z.array(ArchitectureResolutionSchema).length(Architectures.length),
+}
+
+export const DeveloperDefinitionResolutionSchema = z.object({
+  ...ResolutionCommonShape,
+  Definition: z.literal(DeveloperDefinitionName),
+  AppId: z.literal(DeveloperAppId),
+  Version: BetaVersionSchema,
 })
+
+export const NightlyDefinitionResolutionSchema = z.object({
+  ...ResolutionCommonShape,
+  Definition: z.literal(NightlyDefinitionName),
+  AppId: z.literal(NightlyAppId),
+  Version: NightlyVersionSchema,
+  BuildId: NightlyBuildIdSchema,
+  SourceRevision: MozillaSourceRevisionSchema,
+})
+
+export const DefinitionResolutionSchema = z.discriminatedUnion('Definition', [
+  DeveloperDefinitionResolutionSchema,
+  NightlyDefinitionResolutionSchema,
+])
 export type TDefinitionResolution = z.infer<typeof DefinitionResolutionSchema>
 
 export const BuildMatrixEntrySchema = z.object({
   Variant: z.enum(['production', 'tracked', 'latest']),
   Architecture: ArchitectureSchema,
-  Definition: z.literal(DefinitionName),
+  Definition: DefinitionNameSchema,
+  AppId: AppIdSchema,
   DefinitionPath: z.string().min(1),
   ManifestPath: z.string().min(1),
+  LinterPath: z.string().min(1),
   ArtifactName: z.string().min(1),
   Image: z.string().min(1),
   Runner: z.enum(['ubuntu-24.04', 'ubuntu-24.04-arm']),
-  Version: BetaVersionSchema,
+  Version: FirefoxVersionSchema,
 })
 export type TBuildMatrixEntry = z.infer<typeof BuildMatrixEntrySchema>
 
-export const PublicationDefinitionSchema = z.object({
-  Definition: z.literal(DefinitionName),
-  AppId: z.literal(AppId),
+const PublicationDefinitionCommonShape = {
   Branch: z.literal(FlatpakBranch),
-  Version: BetaVersionSchema,
   ReleaseDate: IsoDateSchema,
   Fingerprint: Sha256Schema,
   Architectures: z.array(ArchitectureSchema).length(Architectures.length),
+}
+
+export const DeveloperPublicationDefinitionSchema = z.object({
+  ...PublicationDefinitionCommonShape,
+  Definition: z.literal(DeveloperDefinitionName),
+  AppId: z.literal(DeveloperAppId),
+  Version: BetaVersionSchema,
 })
 
-export const PublicationStateSchema = z.object({
-  SchemaVersion: z.literal(SchemaVersion),
+export const NightlyPublicationDefinitionSchema = z.object({
+  ...PublicationDefinitionCommonShape,
+  Definition: z.literal(NightlyDefinitionName),
+  AppId: z.literal(NightlyAppId),
+  Version: NightlyVersionSchema,
+  BuildId: NightlyBuildIdSchema,
+  SourceRevision: MozillaSourceRevisionSchema,
+})
+
+export const PublicationDefinitionSchema = z.discriminatedUnion('Definition', [
+  DeveloperPublicationDefinitionSchema,
+  NightlyPublicationDefinitionSchema,
+])
+
+const PublicationStateCommonShape = {
   Repository: z.literal(RepositoryName),
   CollectionId: z.literal(CollectionId),
   RepositoryUrl: z.literal(RepositoryUrl),
@@ -95,9 +149,26 @@ export const PublicationStateSchema = z.object({
   PublishedAt: z.string().datetime(),
   RetainedHistoryDepth: z.number().int().min(0).max(1),
   SiteSizeBytes: z.number().int().nonnegative(),
-  Definitions: z.array(PublicationDefinitionSchema).min(1),
+}
+
+export const LegacyPublicationStateSchema = z.object({
+  ...PublicationStateCommonShape,
+  SchemaVersion: z.literal(LegacySchemaVersion),
+  Definitions: z.array(DeveloperPublicationDefinitionSchema).length(1),
+})
+export type TLegacyPublicationState = z.infer<typeof LegacyPublicationStateSchema>
+
+export const PublicationStateSchema = z.object({
+  ...PublicationStateCommonShape,
+  SchemaVersion: z.literal(SchemaVersion),
+  Definitions: z.array(PublicationDefinitionSchema).min(1).max(2),
 })
 export type TPublicationState = z.infer<typeof PublicationStateSchema>
+
+export const ReadablePublicationStateSchema = z.union([
+  PublicationStateSchema,
+  LegacyPublicationStateSchema,
+])
 
 export const ResolutionBundleSchema = z.object({
   SchemaVersion: z.literal(SchemaVersion),
@@ -109,7 +180,7 @@ export const ResolutionBundleSchema = z.object({
   SiteUrl: z.literal(SiteUrl),
   RepositoryUrl: z.literal(RepositoryUrl),
   CurrentState: PublicationStateSchema.nullable(),
-  Resolutions: z.array(DefinitionResolutionSchema).min(1),
+  Resolutions: z.array(DefinitionResolutionSchema).min(2),
   Matrix: z.object({
     include: z.array(BuildMatrixEntrySchema),
   }),

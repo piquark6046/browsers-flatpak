@@ -10,20 +10,22 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { z } from 'zod'
 import {
-  AppId,
   Architectures,
   CollectionId,
   FlatpakBranch,
+  NightlyDefinitionName,
   PagesSizeLimitBytes,
   RepositoryUrl,
   ResolutionBundleSchema,
   SiteUrl,
+  type TAppId,
   type TResolutionBundle,
 } from './contracts.js'
 import {
-  FirefoxFlatpakRefPath,
-  FirefoxLinterPath,
+  DefinitionConfiguration,
+  DefinitionConfigurations,
   RepositoryFingerprintPath,
   RepositoryPublicKeyPath,
 } from './paths.js'
@@ -135,13 +137,19 @@ async function PrepareSigning(
   }
 }
 
-function ExpectedRef(Ref: string, Architecture: string): boolean {
+function ExpectedRef(Ref: string, AppId: TAppId, Architecture: string): boolean {
   const EscapedAppId = AppId.replaceAll('.', '\\.')
   return new RegExp(
     `^(?:app/${EscapedAppId}|runtime/${EscapedAppId}\\.(?:Locale|Debug))`
     + `/${Architecture}/${FlatpakBranch}$`,
     'u',
   ).test(Ref)
+}
+
+function ExpectedCombinedRef(Ref: string): boolean {
+  return DefinitionConfigurations.some((Configuration) =>
+    Architectures.some((Architecture) =>
+      ExpectedRef(Ref, Configuration.AppId, Architecture)))
 }
 
 async function InitializeRepository(
@@ -182,20 +190,22 @@ async function ImportBuildRepositories(
   Bundle: TResolutionBundle,
   Signing: ISigningContext,
 ): Promise<void> {
-  const Resolution = Bundle.Resolutions[0]
-  if (Resolution === undefined) {
-    throw new Error('Production resolution is missing')
+  const Entries = Bundle.Matrix.include.filter(
+    (Entry) => Entry.Variant === 'production',
+  )
+  if (Entries.length === 0) {
+    throw new Error('Publication matrix does not contain changed production builds')
   }
-  for (const Architecture of Architectures) {
-    const MatrixEntry = Bundle.Matrix.include.find(
-      (Entry) => Entry.Architecture === Architecture && Entry.Variant === 'production',
-    )
-    if (MatrixEntry === undefined) {
-      throw new Error(`Build matrix is missing production/${Architecture}`)
+  for (const Entry of Entries) {
+    const Configuration = DefinitionConfiguration(Entry.Definition)
+    if (Entry.AppId !== Configuration.AppId) {
+      throw new Error(
+        `Build matrix maps ${Entry.Definition} to unexpected app ID ${Entry.AppId}`,
+      )
     }
     const SourceRepository = AssertPathWithin(
       BuildArtifactsDirectory,
-      join(BuildArtifactsDirectory, MatrixEntry.ArtifactName, 'repo'),
+      join(BuildArtifactsDirectory, Entry.ArtifactName, 'repo'),
     )
     await ListRegularFiles(SourceRepository)
     const RefsResult = await RunCommand('ostree', [
@@ -206,10 +216,14 @@ async function ImportBuildRepositories(
     const ImportableRefs = Refs.filter(
       (Ref) => Ref.startsWith('app/') || Ref.startsWith('runtime/'),
     )
-    if (!ImportableRefs.includes(`app/${AppId}/${Architecture}/${FlatpakBranch}`)) {
-      throw new Error(`Build repository is missing the main ${Architecture} app ref`)
+    const ExpectedMainRef =
+      `app/${Entry.AppId}/${Entry.Architecture}/${FlatpakBranch}`
+    if (!ImportableRefs.includes(ExpectedMainRef)) {
+      throw new Error(`Build repository is missing ${ExpectedMainRef}`)
     }
-    const UnexpectedRefs = ImportableRefs.filter((Ref) => !ExpectedRef(Ref, Architecture))
+    const UnexpectedRefs = ImportableRefs.filter(
+      (Ref) => !ExpectedRef(Ref, Entry.AppId, Entry.Architecture),
+    )
     if (UnexpectedRefs.length > 0) {
       throw new Error(`Build repository contains unexpected refs: ${UnexpectedRefs.join(', ')}`)
     }
@@ -228,10 +242,58 @@ async function ImportBuildRepositories(
   }
 }
 
+async function ValidateCombinedRepository(
+  RepositoryPath: string,
+  Signing: ISigningContext,
+): Promise<void> {
+  const RefsResult = await RunCommand('ostree', [
+    `--repo=${RepositoryPath}`,
+    'refs',
+  ], { Environment: Signing.Environment })
+  const Refs = RefsResult.Stdout.split(/\r?\n/u).filter((Ref) => Ref !== '')
+  const ImportableRefs = Refs.filter(
+    (Ref) => Ref.startsWith('app/') || Ref.startsWith('runtime/'),
+  )
+  const UnexpectedRefs = ImportableRefs.filter((Ref) => !ExpectedCombinedRef(Ref))
+  if (UnexpectedRefs.length > 0) {
+    throw new Error(`Combined repository contains unexpected refs: ${UnexpectedRefs.join(', ')}`)
+  }
+  for (const Configuration of DefinitionConfigurations) {
+    for (const Architecture of Architectures) {
+      const MainRef =
+        `app/${Configuration.AppId}/${Architecture}/${FlatpakBranch}`
+      if (!ImportableRefs.includes(MainRef)) {
+        throw new Error(`Combined repository is missing ${MainRef}`)
+      }
+    }
+  }
+}
+
+async function CreateMergedLinterFile(TemporaryDirectory: string): Promise<string> {
+  const LinterSchema = z.record(z.string(), z.array(z.string()))
+  const Merged: Record<string, string[]> = {}
+  for (const Configuration of DefinitionConfigurations) {
+    const Parsed = LinterSchema.parse(
+      JSON.parse(await readFile(Configuration.LinterPath, 'utf8')) as unknown,
+    )
+    const Keys = Object.keys(Parsed)
+    if (Keys.length !== 1 || Keys[0] !== Configuration.AppId) {
+      throw new Error(
+        `${Configuration.Name}/linter.json must contain only ${Configuration.AppId}`,
+      )
+    }
+    Merged[Configuration.AppId] = Parsed[Configuration.AppId]!
+  }
+  const LinterPath = join(TemporaryDirectory, 'linter.json')
+  await writeFile(LinterPath, PrettyCanonicalJson(Merged))
+  return LinterPath
+}
+
 async function UpdateRepository(
   RepositoryPath: string,
   Signing: ISigningContext,
   HistoryDepth: 0 | 1,
+  LinterPath: string,
 ): Promise<void> {
   if (HistoryDepth === 0) {
     const DeltasPath = AssertPathWithin(RepositoryPath, join(RepositoryPath, 'deltas'))
@@ -262,15 +324,35 @@ async function UpdateRepository(
   await RunCommand('flatpak-builder-lint', [
     '--exceptions',
     '--user-exceptions',
-    FirefoxLinterPath,
+    LinterPath,
     'repo',
     RepositoryPath,
   ], { Environment: Signing.Environment })
 }
 
-function LandingPage(Bundle: TResolutionBundle): string {
-  const Resolution = Bundle.Resolutions[0]!
-  const InstallCommand = `flatpak install ${SiteUrl}${basename(FirefoxFlatpakRefPath)}`
+export function LandingPage(Bundle: TResolutionBundle): string {
+  const Cards = DefinitionConfigurations.map((Configuration) => {
+    const Resolution = Bundle.Resolutions.find(
+      (Candidate) =>
+        Candidate.Variant === 'production'
+        && Candidate.Definition === Configuration.Name,
+    )
+    if (Resolution === undefined) {
+      throw new Error(`Landing page resolution is missing ${Configuration.Name}`)
+    }
+    const ReferenceName = basename(Configuration.FlatpakRefPath)
+    const InstallCommand = `flatpak install ${SiteUrl}${ReferenceName}`
+    const Build = Resolution.Definition === NightlyDefinitionName
+      ? `<p>Mozilla build: <code>${EscapeHtml(Resolution.BuildId)}</code></p>`
+      : ''
+    return `  <div class="card">
+    <h2>${EscapeHtml(Configuration.Title)} ${EscapeHtml(Resolution.Version)}</h2>
+    ${Build}
+    <p>Architectures: <code>${Architectures.join(', ')}</code></p>
+    <p><a href="${EscapeHtml(ReferenceName)}">Download the Flatpak reference</a></p>
+    <pre><code>${EscapeHtml(InstallCommand)}</code></pre>
+  </div>`
+  }).join('\n')
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -281,18 +363,13 @@ function LandingPage(Bundle: TResolutionBundle): string {
     :root { color-scheme: light dark; font: 18px/1.55 system-ui, sans-serif; }
     body { margin: 0 auto; max-width: 48rem; padding: 3rem 1.25rem; }
     code { overflow-wrap: anywhere; }
-    .card { border: 1px solid #8888; border-radius: .75rem; padding: 1.25rem; }
+    .card { border: 1px solid #8888; border-radius: .75rem; margin-block: 1rem; padding: 1.25rem; }
   </style>
 </head>
 <body>
   <h1>Browsers Flatpak Repository</h1>
   <p>Independently maintained browser Flatpaks, built from reviewed definitions.</p>
-  <div class="card">
-    <h2>Firefox Developer Edition ${EscapeHtml(Resolution.Version)}</h2>
-    <p>Architectures: <code>${Architectures.join(', ')}</code></p>
-    <p><a href="${EscapeHtml(basename(FirefoxFlatpakRefPath))}">Download the Flatpak reference</a></p>
-    <pre><code>${EscapeHtml(InstallCommand)}</code></pre>
-  </div>
+${Cards}
   <p><a href="publication-state.json">Signed publication metadata</a> ·
     <a href="browsers-flatpak-signing-key.asc">Repository public key</a></p>
 </body>
@@ -354,10 +431,11 @@ async function StageSite(
   await CopyRegularTree(RepositoryPath, join(SiteDirectory, 'repo'))
   await writeFile(join(SiteDirectory, 'index.html'), LandingPage(Bundle))
   await writeFile(join(SiteDirectory, '.nojekyll'), '')
-  await writeFile(
-    join(SiteDirectory, basename(FirefoxFlatpakRefPath)),
-    await readFile(FirefoxFlatpakRefPath),
-  )
+  await Promise.all(DefinitionConfigurations.map(async (Configuration) =>
+    await writeFile(
+      join(SiteDirectory, basename(Configuration.FlatpakRefPath)),
+      await readFile(Configuration.FlatpakRefPath),
+    )))
   await writeFile(
     join(SiteDirectory, 'browsers-flatpak-signing-key.asc'),
     await readFile(RepositoryPublicKeyPath),
@@ -385,6 +463,7 @@ export async function FinalizePublication(Options: IFinalizeOptions): Promise<nu
       Options.Passphrase,
       TemporaryDirectory,
     )
+    const LinterPath = await CreateMergedLinterFile(TemporaryDirectory)
     const RepositoryPath = join(TemporaryDirectory, 'repo')
     const InternalSiteDirectory = join(TemporaryDirectory, 'site')
     await InitializeRepository(RepositoryPath, Bundle, Signing)
@@ -394,7 +473,8 @@ export async function FinalizePublication(Options: IFinalizeOptions): Promise<nu
       Bundle,
       Signing,
     )
-    await UpdateRepository(RepositoryPath, Signing, 1)
+    await ValidateCombinedRepository(RepositoryPath, Signing)
+    await UpdateRepository(RepositoryPath, Signing, 1, LinterPath)
     let HistoryDepth: 0 | 1 = 1
     let SiteSize = await StageSite(
       InternalSiteDirectory,
@@ -406,7 +486,7 @@ export async function FinalizePublication(Options: IFinalizeOptions): Promise<nu
     )
     if (SiteSize > PagesSizeLimitBytes) {
       HistoryDepth = 0
-      await UpdateRepository(RepositoryPath, Signing, HistoryDepth)
+      await UpdateRepository(RepositoryPath, Signing, HistoryDepth, LinterPath)
       SiteSize = await StageSite(
         InternalSiteDirectory,
         RepositoryPath,
@@ -423,8 +503,18 @@ export async function FinalizePublication(Options: IFinalizeOptions): Promise<nu
       )
     }
     const RootEntries = await readdir(InternalSiteDirectory)
-    if (!RootEntries.includes('repo') || !RootEntries.includes('publication-state.json')) {
-      throw new Error('Staged Pages site is incomplete')
+    const RequiredRootEntries = [
+      'repo',
+      'publication-state.json',
+      ...DefinitionConfigurations.map(
+        (Configuration) => basename(Configuration.FlatpakRefPath),
+      ),
+    ]
+    const MissingRootEntries = RequiredRootEntries.filter(
+      (Entry) => !RootEntries.includes(Entry),
+    )
+    if (MissingRootEntries.length > 0) {
+      throw new Error(`Staged Pages site is incomplete: ${MissingRootEntries.join(', ')}`)
     }
     await mkdir(dirname(Options.SiteDirectory), { recursive: true })
     await mkdir(Options.SiteDirectory)
