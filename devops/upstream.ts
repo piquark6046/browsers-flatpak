@@ -8,6 +8,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join, relative } from 'node:path'
+import { setTimeout as Delay } from 'node:timers/promises'
 import { parse as ParseYaml, stringify as StringifyYaml } from 'yaml'
 import { z } from 'zod'
 import {
@@ -86,6 +87,13 @@ const DeveloperReleaseRoot =
 const NightlyArchiveRoot = 'https://archive.mozilla.org/pub/firefox/nightly'
 const NightlyLatestRoot = `${NightlyArchiveRoot}/latest-mozilla-central/`
 const MaximumNightlyArchiveBytes = 160 * 1024 * 1024
+const NightlyLanguagePackRetryDelaysMilliseconds = [
+  30_000,
+  60_000,
+  120_000,
+  240_000,
+  480_000,
+] as const
 
 const ProductDetailsSchema = z.object({
   FIREFOX_DEVEDITION: BetaVersionSchema,
@@ -131,6 +139,27 @@ export interface IResolveOptions {
   AllowDowngrade?: boolean
   Bootstrap?: boolean
 }
+
+export interface INightlyLanguagePackResolutionDependencies {
+  Delay: (Milliseconds: number) => Promise<void>
+  Request: typeof Request
+  Warn: (Message: string) => void
+}
+
+interface INightlyLanguagePackResolution {
+  Locale: string
+  Url: string
+  Sha512: string
+  DestinationFilename: string
+}
+
+const NightlyLanguagePackResolutionDependencies = {
+  Delay: async (Milliseconds) => {
+    await Delay(Milliseconds)
+  },
+  Request,
+  Warn: (Message) => console.warn(Message),
+} satisfies INightlyLanguagePackResolutionDependencies
 
 interface IArchitectureFacts {
   Architecture: TArchitecture
@@ -644,35 +673,78 @@ async function MapWithConcurrency<TInput, TOutput>(
   return Results
 }
 
-async function ResolveNightlyLanguagePacks(
+export async function ResolveNightlyLanguagePacks(
   BuildBaseUrl: URL,
   Version: string,
   Locales: readonly string[],
-): Promise<{
-  Locale: string
-  Url: string
-  Sha512: string
-  DestinationFilename: string
-}[]> {
+  Dependencies: INightlyLanguagePackResolutionDependencies =
+    NightlyLanguagePackResolutionDependencies,
+): Promise<INightlyLanguagePackResolution[]> {
   const L10nBaseUrl = new URL(
     BuildBaseUrl.href.replace(/-mozilla-central\/$/u, '-mozilla-central-l10n/'),
   )
   if (L10nBaseUrl.href === BuildBaseUrl.href) {
     throw new Error(`Could not derive Nightly localization directory from ${BuildBaseUrl.href}`)
   }
-  return await MapWithConcurrency(Locales, 8, async (Locale) => {
-    const XpiFilename = `firefox-${Version}.${Locale}.langpack.xpi`
-    const ChecksumFilename = `firefox-${Version}.${Locale}.linux-x86_64.checksums`
-    const Checksums = ParseNightlyChecksumFile(
-      await FetchText(new URL(ChecksumFilename, L10nBaseUrl)),
-    )
-    return {
-      Locale,
-      Url: new URL(`linux-x86_64/xpi/${XpiFilename}`, L10nBaseUrl).href,
-      Sha512: RequiredNightlyChecksum(Checksums, 'sha512', XpiFilename),
-      DestinationFilename: `langpack-${Locale}@firefox.mozilla.org.xpi`,
+
+  const Resolutions = new Map<string, INightlyLanguagePackResolution>()
+  let PendingLocales = [...Locales]
+  for (
+    let Attempt = 0;
+    Attempt <= NightlyLanguagePackRetryDelaysMilliseconds.length;
+    Attempt += 1
+  ) {
+    const Outcomes = await MapWithConcurrency(PendingLocales, 8, async (Locale) => {
+      const XpiFilename = `firefox-${Version}.${Locale}.langpack.xpi`
+      const ChecksumFilename = `firefox-${Version}.${Locale}.linux-x86_64.checksums`
+      const ChecksumUrl = new URL(ChecksumFilename, L10nBaseUrl)
+      const Response = await Dependencies.Request(ChecksumUrl)
+      if (Response.Status === 404 && Response.Url.href === ChecksumUrl.href) {
+        return null
+      }
+      if (Response.Status !== 200) {
+        throw new Error(
+          `Expected HTTP 200 from ${Response.Url.href}; received ${Response.Status}`,
+        )
+      }
+      const Checksums = ParseNightlyChecksumFile(Response.Body)
+      return {
+        Locale,
+        Url: new URL(`linux-x86_64/xpi/${XpiFilename}`, L10nBaseUrl).href,
+        Sha512: RequiredNightlyChecksum(Checksums, 'sha512', XpiFilename),
+        DestinationFilename: `langpack-${Locale}@firefox.mozilla.org.xpi`,
+      }
+    })
+
+    const NextPendingLocales: string[] = []
+    for (const [Index, Outcome] of Outcomes.entries()) {
+      const Locale = PendingLocales[Index]!
+      if (Outcome === null) {
+        NextPendingLocales.push(Locale)
+      } else {
+        Resolutions.set(Locale, Outcome)
+      }
     }
-  })
+    if (NextPendingLocales.length === 0) {
+      return Locales.map((Locale) => Resolutions.get(Locale)!)
+    }
+
+    const RetryDelay = NightlyLanguagePackRetryDelaysMilliseconds[Attempt]
+    if (RetryDelay === undefined) {
+      throw new Error(
+        'Nightly localization checksums remained unavailable after '
+        + `${Attempt + 1} attempts: ${NextPendingLocales.join(', ')}`,
+      )
+    }
+    Dependencies.Warn(
+      'Nightly localization checksums are not yet available for '
+      + `${NextPendingLocales.length} locale(s); retrying attempt ${Attempt + 2} of `
+      + `${NightlyLanguagePackRetryDelaysMilliseconds.length + 1} in ${RetryDelay} ms`,
+    )
+    await Dependencies.Delay(RetryDelay)
+    PendingLocales = NextPendingLocales
+  }
+  throw new Error('Nightly localization checksum retry loop terminated unexpectedly')
 }
 
 async function ResolveNightlyReleaseFacts(

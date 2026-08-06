@@ -22,6 +22,7 @@ import {
   DeveloperConfiguration,
   NightlyConfiguration,
 } from './paths.js'
+import type { IHttpResponse } from './network.js'
 import { LandingPage } from './publication.js'
 import {
   CreatePublicationState,
@@ -30,7 +31,9 @@ import {
   ParseNightlyChecksumFile,
   PatchManifest,
   PatchMetainfo,
+  ResolveNightlyLanguagePacks,
   ShouldBuildDefinition,
+  type INightlyLanguagePackResolutionDependencies,
 } from './upstream.js'
 import {
   CanonicalJson,
@@ -38,6 +41,46 @@ import {
   CompareNightlyBuildIds,
   Sha256,
 } from './utilities.js'
+
+const TestNightlyVersion = '155.0a1'
+const TestNightlyBuildBaseUrl = new URL(
+  'https://archive.mozilla.org/pub/firefox/nightly/2026/08/'
+  + '2026-08-06-04-16-15-mozilla-central/',
+)
+const NightlyLanguagePackRetryDelaysMilliseconds = [
+  30_000,
+  60_000,
+  120_000,
+  240_000,
+  480_000,
+]
+
+function NightlyLanguagePackChecksum(Locale: string, Algorithm = 'sha512'): string {
+  const Hash = Algorithm === 'sha512' ? 'a'.repeat(128) : 'b'.repeat(64)
+  return `${Hash} ${Algorithm} 123 firefox-${TestNightlyVersion}.${Locale}.langpack.xpi\n`
+}
+
+function NightlyLocaleFromChecksumUrl(Url: URL): string {
+  const Match = /firefox-155\.0a1\.([A-Za-z0-9-]+)\.linux-x86_64\.checksums$/u
+    .exec(Url.pathname)
+  if (Match?.[1] === undefined) {
+    throw new Error(`Unexpected Nightly checksum URL: ${Url.href}`)
+  }
+  return Match[1]
+}
+
+function HttpResponse(
+  Input: string | URL,
+  Status: number,
+  Body = '',
+): IHttpResponse {
+  return {
+    Status,
+    Headers: {},
+    Body,
+    Url: typeof Input === 'string' ? new URL(Input) : Input,
+  }
+}
 
 test('Firefox version and Nightly build comparisons are numeric and chronological', () => {
   assert.equal(CompareBetaVersions('154.0b10', '154.0b2'), 1)
@@ -85,6 +128,186 @@ test('checksum parsers reject malformed, duplicate, and unsafe paths', () => {
     () => ParseNightlyChecksumFile('not-a-checksum\n'),
     /Malformed/u,
   )
+})
+
+test('Nightly language-pack readiness retries only missing locales', async () => {
+  const Delays: number[] = []
+  const RequestCounts = new Map<string, number>()
+  const Warnings: string[] = []
+  const Dependencies: INightlyLanguagePackResolutionDependencies = {
+    Delay: async (Milliseconds) => {
+      Delays.push(Milliseconds)
+    },
+    Request: async (Input) => {
+      const Url = typeof Input === 'string' ? new URL(Input) : Input
+      const Locale = NightlyLocaleFromChecksumUrl(Url)
+      const Count = (RequestCounts.get(Locale) ?? 0) + 1
+      RequestCounts.set(Locale, Count)
+      if (Locale === 'cak' && Count === 1) {
+        return HttpResponse(Url, 404)
+      }
+      return HttpResponse(Url, 200, NightlyLanguagePackChecksum(Locale))
+    },
+    Warn: (Message) => {
+      Warnings.push(Message)
+    },
+  }
+
+  const Resolutions = await ResolveNightlyLanguagePacks(
+    TestNightlyBuildBaseUrl,
+    TestNightlyVersion,
+    ['cak', 'fr'],
+    Dependencies,
+  )
+
+  assert.deepEqual(Resolutions.map((Resolution) => Resolution.Locale), ['cak', 'fr'])
+  assert.equal(RequestCounts.get('cak'), 2)
+  assert.equal(RequestCounts.get('fr'), 1)
+  assert.deepEqual(Delays, [30_000])
+  assert.equal(Warnings.length, 1)
+  assert.match(Warnings[0]!, /1 locale\(s\).*attempt 2 of 6.*30000 ms/u)
+  assert.equal(Resolutions[0]?.Sha512, 'a'.repeat(128))
+  assert.equal(
+    Resolutions[0]?.Url,
+    'https://archive.mozilla.org/pub/firefox/nightly/2026/08/'
+    + '2026-08-06-04-16-15-mozilla-central-l10n/linux-x86_64/xpi/'
+    + 'firefox-155.0a1.cak.langpack.xpi',
+  )
+})
+
+test('Nightly language-pack readiness fails after the bounded retry schedule', async () => {
+  const Delays: number[] = []
+  const Warnings: string[] = []
+  let Requests = 0
+  const Dependencies: INightlyLanguagePackResolutionDependencies = {
+    Delay: async (Milliseconds) => {
+      Delays.push(Milliseconds)
+    },
+    Request: async (Input) => {
+      Requests += 1
+      return HttpResponse(Input, 404)
+    },
+    Warn: (Message) => {
+      Warnings.push(Message)
+    },
+  }
+
+  await assert.rejects(
+    ResolveNightlyLanguagePacks(
+      TestNightlyBuildBaseUrl,
+      TestNightlyVersion,
+      ['cak'],
+      Dependencies,
+    ),
+    /remained unavailable after 6 attempts: cak/u,
+  )
+
+  assert.equal(Requests, 6)
+  assert.deepEqual(Delays, NightlyLanguagePackRetryDelaysMilliseconds)
+  assert.equal(Warnings.length, 5)
+})
+
+test('Nightly language-pack readiness does not retry terminal HTTP failures', async () => {
+  let Delays = 0
+  let Warnings = 0
+  const Dependencies: INightlyLanguagePackResolutionDependencies = {
+    Delay: async () => {
+      Delays += 1
+    },
+    Request: async (Input) => HttpResponse(Input, 403),
+    Warn: () => {
+      Warnings += 1
+    },
+  }
+
+  await assert.rejects(
+    ResolveNightlyLanguagePacks(
+      TestNightlyBuildBaseUrl,
+      TestNightlyVersion,
+      ['cak'],
+      Dependencies,
+    ),
+    /received 403/u,
+  )
+  assert.equal(Delays, 0)
+  assert.equal(Warnings, 0)
+
+  const Redirected404Dependencies: INightlyLanguagePackResolutionDependencies = {
+    ...Dependencies,
+    Request: async () => HttpResponse('https://download.mozilla.org/missing', 404),
+  }
+  await assert.rejects(
+    ResolveNightlyLanguagePacks(
+      TestNightlyBuildBaseUrl,
+      TestNightlyVersion,
+      ['cak'],
+      Redirected404Dependencies,
+    ),
+    /download\.mozilla\.org\/missing; received 404/u,
+  )
+  assert.equal(Delays, 0)
+  assert.equal(Warnings, 0)
+})
+
+test('Nightly language-pack readiness preserves checksum integrity failures', async () => {
+  const Bodies = [
+    'not-a-checksum\n',
+    NightlyLanguagePackChecksum('cak', 'sha256'),
+  ]
+  const Patterns = [/Malformed Nightly checksum/u, /do not contain sha512/u]
+  for (const [Index, Body] of Bodies.entries()) {
+    const Dependencies: INightlyLanguagePackResolutionDependencies = {
+      Delay: async () => {
+        assert.fail('integrity failures must not be delayed')
+      },
+      Request: async (Input) => HttpResponse(Input, 200, Body),
+      Warn: () => {
+        assert.fail('integrity failures must not be retried')
+      },
+    }
+    await assert.rejects(
+      ResolveNightlyLanguagePacks(
+        TestNightlyBuildBaseUrl,
+        TestNightlyVersion,
+        ['cak'],
+        Dependencies,
+      ),
+      Patterns[Index]!,
+    )
+  }
+})
+
+test('Nightly language-pack requests retain bounded concurrency', async () => {
+  const Locales = Array.from({ length: 10 }, (_Value, Index) => `l${Index}`)
+  let ActiveRequests = 0
+  let MaximumActiveRequests = 0
+  const Dependencies: INightlyLanguagePackResolutionDependencies = {
+    Delay: async () => {
+      assert.fail('complete language packs must not be delayed')
+    },
+    Request: async (Input) => {
+      const Url = typeof Input === 'string' ? new URL(Input) : Input
+      const Locale = NightlyLocaleFromChecksumUrl(Url)
+      ActiveRequests += 1
+      MaximumActiveRequests = Math.max(MaximumActiveRequests, ActiveRequests)
+      await new Promise<void>((Resolve) => setImmediate(Resolve))
+      ActiveRequests -= 1
+      return HttpResponse(Url, 200, NightlyLanguagePackChecksum(Locale))
+    },
+    Warn: () => {
+      assert.fail('complete language packs must not be retried')
+    },
+  }
+
+  const Resolutions = await ResolveNightlyLanguagePacks(
+    TestNightlyBuildBaseUrl,
+    TestNightlyVersion,
+    Locales,
+    Dependencies,
+  )
+
+  assert.equal(MaximumActiveRequests, 8)
+  assert.deepEqual(Resolutions.map((Resolution) => Resolution.Locale), Locales)
 })
 
 test('Developer Edition manifest patching is architecture-specific and ephemeral', async () => {
