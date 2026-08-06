@@ -10,6 +10,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { setTimeout as Delay } from 'node:timers/promises'
 import { z } from 'zod'
 import {
   Architectures,
@@ -57,6 +58,26 @@ interface ISigningContext {
   GnuPgHome: string
   SigningFingerprint: string
   Environment: NodeJS.ProcessEnv
+}
+
+export interface IRepositoryInitializationDependencies {
+  Delay: (Milliseconds: number) => Promise<void>
+  RemoveRepository: (RepositoryPath: string) => Promise<void>
+  RunCommand: typeof RunCommand
+  Warn: (Message: string) => void
+}
+
+const PublishedPullRetryDelaysMilliseconds = [1_000, 5_000] as const
+
+const RepositoryInitializationDependencies: IRepositoryInitializationDependencies = {
+  Delay: async (Milliseconds) => {
+    await Delay(Milliseconds)
+  },
+  RemoveRepository: async (RepositoryPath) => {
+    await rm(RepositoryPath, { recursive: true, force: true })
+  },
+  RunCommand,
+  Warn: (Message) => console.warn(Message),
 }
 
 async function PrepareSigning(
@@ -152,35 +173,91 @@ function ExpectedCombinedRef(Ref: string): boolean {
       ExpectedRef(Ref, Configuration.AppId, Architecture)))
 }
 
-async function InitializeRepository(
+function RetryablePublishedPullError(CatchValue: unknown): boolean {
+  if (!(CatchValue instanceof Error)) {
+    return false
+  }
+  return CatchValue.message.startsWith('ostree exited with ')
+    && CatchValue.message.includes(`URI ${RepositoryUrl}objects/`)
+    && /exceeded maximum size of [0-9]+ bytes/u.test(CatchValue.message)
+}
+
+async function InitializeRepositoryAttempt(
   RepositoryPath: string,
-  Bundle: TResolutionBundle,
-  Signing: ISigningContext,
+  PullPublishedRepository: boolean,
+  Environment: NodeJS.ProcessEnv,
+  Dependencies: IRepositoryInitializationDependencies,
 ): Promise<void> {
-  await RunCommand('ostree', [
+  await Dependencies.RemoveRepository(RepositoryPath)
+  await Dependencies.RunCommand('ostree', [
     `--repo=${RepositoryPath}`,
     'init',
     '--mode=archive-z2',
     `--collection-id=${CollectionId}`,
-  ], { Environment: Signing.Environment })
-  if (Bundle.CurrentState !== null) {
-    await RunCommand('ostree', [
+  ], { Environment })
+  if (PullPublishedRepository) {
+    await Dependencies.RunCommand('ostree', [
       `--repo=${RepositoryPath}`,
       'remote',
       'add',
       `--collection-id=${CollectionId}`,
+      '--set=gpg-verify=true',
       '--set=gpg-verify-summary=true',
       `--gpg-import=${RepositoryPublicKeyPath}`,
       'published',
       RepositoryUrl,
-    ], { Environment: Signing.Environment })
-    await RunCommand('ostree', [
+    ], { Environment })
+    await Dependencies.RunCommand('ostree', [
       `--repo=${RepositoryPath}`,
       'pull',
       '--mirror',
       '--depth=1',
       'published',
-    ], { Environment: Signing.Environment })
+    ], { Environment })
+  }
+}
+
+export async function InitializeRepository(
+  RepositoryPath: string,
+  PullPublishedRepository: boolean,
+  Environment: NodeJS.ProcessEnv,
+  Dependencies: IRepositoryInitializationDependencies = RepositoryInitializationDependencies,
+): Promise<void> {
+  if (!PullPublishedRepository) {
+    await InitializeRepositoryAttempt(
+      RepositoryPath,
+      PullPublishedRepository,
+      Environment,
+      Dependencies,
+    )
+    return
+  }
+
+  for (
+    let Attempt = 0;
+    Attempt <= PublishedPullRetryDelaysMilliseconds.length;
+    Attempt += 1
+  ) {
+    try {
+      await InitializeRepositoryAttempt(
+        RepositoryPath,
+        PullPublishedRepository,
+        Environment,
+        Dependencies,
+      )
+      return
+    } catch (CatchValue) {
+      const RetryDelay = PublishedPullRetryDelaysMilliseconds[Attempt]
+      if (RetryDelay === undefined || !RetryablePublishedPullError(CatchValue)) {
+        throw CatchValue
+      }
+      Dependencies.Warn(
+        'Published repository pull received an unexpected-size response; '
+        + `retrying attempt ${Attempt + 2} of `
+        + `${PublishedPullRetryDelaysMilliseconds.length + 1} in ${RetryDelay} ms`,
+      )
+      await Dependencies.Delay(RetryDelay)
+    }
   }
 }
 
@@ -466,7 +543,11 @@ export async function FinalizePublication(Options: IFinalizeOptions): Promise<nu
     const LinterPath = await CreateMergedLinterFile(TemporaryDirectory)
     const RepositoryPath = join(TemporaryDirectory, 'repo')
     const InternalSiteDirectory = join(TemporaryDirectory, 'site')
-    await InitializeRepository(RepositoryPath, Bundle, Signing)
+    await InitializeRepository(
+      RepositoryPath,
+      Bundle.CurrentState !== null,
+      Signing.Environment,
+    )
     await ImportBuildRepositories(
       RepositoryPath,
       Options.BuildArtifactsDirectory,
