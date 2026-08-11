@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
+import { promisify } from 'node:util'
 import {
   Architectures,
   CollectionId,
   DeveloperAppId,
   DeveloperDefinitionName,
   LegacyPublicationStateSchema,
+  MozillaPrimaryFingerprint,
+  MozillaSigningFingerprints,
   NightlyAppId,
   NightlyDefinitionName,
   PublicationStateSchema,
@@ -20,6 +24,7 @@ import {
 } from './contracts.js'
 import {
   DeveloperConfiguration,
+  MozillaPublicKeyPath,
   NightlyConfiguration,
 } from './paths.js'
 import type { IHttpResponse } from './network.js'
@@ -54,6 +59,23 @@ const NightlyLanguagePackRetryDelaysMilliseconds = [
   240_000,
   480_000,
 ]
+const ExecFile = promisify(execFile)
+
+function SigningSubkeyFingerprints(Listing: string): Set<string> {
+  const Records = Listing.split(/\r?\n/u).filter((Record) => Record.length > 0)
+  const Fingerprints = new Set<string>()
+  for (let Index = 0; Index < Records.length; Index += 1) {
+    const Fields = Records[Index]!.split(':')
+    if (Fields[0] !== 'sub' || !Fields[11]?.includes('s')) {
+      continue
+    }
+    const FingerprintFields = Records[Index + 1]?.split(':')
+    if (FingerprintFields?.[0] === 'fpr' && FingerprintFields[9] !== undefined) {
+      Fingerprints.add(FingerprintFields[9])
+    }
+  }
+  return Fingerprints
+}
 
 function NightlyLanguagePackChecksum(Locale: string, Algorithm = 'sha512'): string {
   const Hash = Algorithm === 'sha512' ? 'a'.repeat(128) : 'b'.repeat(64)
@@ -90,6 +112,20 @@ test('Firefox version and Nightly build comparisons are numeric and chronologica
   assert.equal(CompareNightlyBuildIds('20260729010203', '20260728235959'), 1)
   assert.equal(CompareNightlyBuildIds('20260728214328', '20260728214328'), 0)
   assert.equal(CompareNightlyBuildIds('20260727000000', '20260728214328'), -1)
+})
+
+test('Mozilla keyring contains the pinned primary and accepted signing subkeys', async () => {
+  const { stdout: Stdout } = await ExecFile('gpg', [
+    '--batch',
+    '--with-colons',
+    '--show-keys',
+    MozillaPublicKeyPath,
+  ])
+  assert.match(Stdout, new RegExp(`^fpr:::::::::${MozillaPrimaryFingerprint}:$`, 'mu'))
+  const SigningFingerprints = SigningSubkeyFingerprints(Stdout)
+  for (const Fingerprint of MozillaSigningFingerprints) {
+    assert(SigningFingerprints.has(Fingerprint), `Missing signing subkey ${Fingerprint}`)
+  }
 })
 
 test('canonical JSON and SHA-256 are deterministic', () => {

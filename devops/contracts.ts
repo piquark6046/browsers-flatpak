@@ -18,7 +18,10 @@ export const RuntimeRepositoryUrl = 'https://dl.flathub.org/repo/flathub.flatpak
 export const PagesSizeLimitBytes = 900 * 1024 * 1024
 
 export const MozillaPrimaryFingerprint = '14F26682D0916CDD81E37B6D61B7B526D98F0353'
-export const MozillaSigningFingerprint = '09BEED63F3462A2DFFAB3B875ECB6497C1A20256'
+export const MozillaSigningFingerprints = [
+  '827E658608679618CD349F93678E455D76767AA3',
+  '09BEED63F3462A2DFFAB3B875ECB6497C1A20256',
+] as const
 
 export const ArchitectureSchema = z.enum(['x86_64', 'aarch64'])
 export type TArchitecture = z.infer<typeof ArchitectureSchema>

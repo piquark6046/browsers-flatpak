@@ -25,7 +25,7 @@ import {
   IsoDateSchema,
   LegacySchemaVersion,
   MozillaPrimaryFingerprint,
-  MozillaSigningFingerprint,
+  MozillaSigningFingerprints,
   NightlyAppId,
   NightlyBuildIdSchema,
   NightlyDefinitionName,
@@ -333,7 +333,7 @@ async function FetchSignedDeveloperChecksums(
     Signature,
     MozillaPublicKeyPath,
     MozillaPrimaryFingerprint,
-    MozillaSigningFingerprint,
+    MozillaSigningFingerprints,
   )
   return ParseChecksumFile(Content, Algorithm)
 }
@@ -645,7 +645,7 @@ async function VerifyNightlyArchive(Url: string, ExpectedSha256: string): Promis
       Signature,
       MozillaPublicKeyPath,
       MozillaPrimaryFingerprint,
-      MozillaSigningFingerprint,
+      MozillaSigningFingerprints,
     )
   } finally {
     await rm(TemporaryDirectory, { recursive: true, force: true })
