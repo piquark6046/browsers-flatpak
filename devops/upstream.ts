@@ -731,10 +731,14 @@ export async function ResolveNightlyLanguagePacks(
 
     const RetryDelay = NightlyLanguagePackRetryDelaysMilliseconds[Attempt]
     if (RetryDelay === undefined) {
-      throw new Error(
-        'Nightly localization checksums remained unavailable after '
-        + `${Attempt + 1} attempts: ${NextPendingLocales.join(', ')}`,
+      Dependencies.Warn(
+        'Omitting Nightly language packs whose localization checksums remained '
+        + `unavailable after ${Attempt + 1} attempts: ${NextPendingLocales.join(', ')}`,
       )
+      return Locales.flatMap((Locale) => {
+        const Resolution = Resolutions.get(Locale)
+        return Resolution === undefined ? [] : [Resolution]
+      })
     }
     Dependencies.Warn(
       'Nightly localization checksums are not yet available for '

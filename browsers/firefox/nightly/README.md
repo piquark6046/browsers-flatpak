@@ -25,12 +25,14 @@ signature was verified with the Mozilla Software Releases key:
 - Signing subkey:
   `09BE ED63 F346 2A2D FFAB 3B87 5ECB 6497 C1A2 0256`
 
-`langpack.json` is a sorted `string[]` allowlist containing all 113 language
-codes offered by the selected Nightly localization build, excluding bundled
-`en-US`. It intentionally contains no URLs, checksums, destination paths, or
-Flatpak source objects. DevOps preprocessing resolves each code against the
-matching immutable localization build and injects checksum-pinned XPI sources
-into the manifest.
+`langpack.json` is a sorted `string[]` allowlist containing 113 candidate
+language codes, excluding bundled `en-US`. It intentionally contains no URLs,
+checksums, destination paths, or Flatpak source objects. DevOps preprocessing
+resolves each code against the matching immutable localization build and
+injects checksum-pinned XPI sources that Mozilla published for that build into
+the manifest. If some checksum files remain unpublished after bounded retries,
+the resolver warns and omits those locales; keeping them in the allowlist lets
+later complete builds restore them automatically.
 
 ## Payload invariant
 
@@ -89,8 +91,11 @@ values:
 
 The resolver requires both architecture Buildhub records to identify the same
 build ID, version, timestamp, and source revision. It verifies archive
-signatures and requires every selected language pack to belong to that build.
-Patched values never return to the source checkout.
+signatures and requires every included language pack to have a matching
+SHA-512 checksum from that build. A direct `404` from an immutable localization
+checksum URL may omit that locale after bounded retries; redirects, other HTTP
+failures, malformed checksums, and missing SHA-512 entries still fail
+resolution. Patched values never return to the source checkout.
 
 The generated repository is signed with the public key embedded in
 `dev.piquark6046.Firefox.Nightly.flatpakref` and published below `/repo/` on

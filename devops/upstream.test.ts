@@ -211,36 +211,46 @@ test('Nightly language-pack readiness retries only missing locales', async () =>
   )
 })
 
-test('Nightly language-pack readiness fails after the bounded retry schedule', async () => {
+test('Nightly language-pack readiness omits unavailable locales after retries', async () => {
   const Delays: number[] = []
+  const RequestCounts = new Map<string, number>()
   const Warnings: string[] = []
-  let Requests = 0
   const Dependencies: INightlyLanguagePackResolutionDependencies = {
     Delay: async (Milliseconds) => {
       Delays.push(Milliseconds)
     },
     Request: async (Input) => {
-      Requests += 1
-      return HttpResponse(Input, 404)
+      const Url = typeof Input === 'string' ? new URL(Input) : Input
+      const Locale = NightlyLocaleFromChecksumUrl(Url)
+      const Count = (RequestCounts.get(Locale) ?? 0) + 1
+      RequestCounts.set(Locale, Count)
+      if (Locale === 'cak' || (Locale === 'fr' && Count === 1)) {
+        return HttpResponse(Url, 404)
+      }
+      return HttpResponse(Url, 200, NightlyLanguagePackChecksum(Locale))
     },
     Warn: (Message) => {
       Warnings.push(Message)
     },
   }
 
-  await assert.rejects(
-    ResolveNightlyLanguagePacks(
-      TestNightlyBuildBaseUrl,
-      TestNightlyVersion,
-      ['cak'],
-      Dependencies,
-    ),
-    /remained unavailable after 6 attempts: cak/u,
+  const Resolutions = await ResolveNightlyLanguagePacks(
+    TestNightlyBuildBaseUrl,
+    TestNightlyVersion,
+    ['cak', 'fr', 'de'],
+    Dependencies,
   )
 
-  assert.equal(Requests, 6)
+  assert.deepEqual(Resolutions.map((Resolution) => Resolution.Locale), ['fr', 'de'])
+  assert.equal(RequestCounts.get('cak'), 6)
+  assert.equal(RequestCounts.get('fr'), 2)
+  assert.equal(RequestCounts.get('de'), 1)
   assert.deepEqual(Delays, NightlyLanguagePackRetryDelaysMilliseconds)
-  assert.equal(Warnings.length, 5)
+  assert.equal(Warnings.length, 6)
+  assert.match(
+    Warnings.at(-1)!,
+    /Omitting Nightly language packs.*unavailable after 6 attempts: cak/u,
+  )
 })
 
 test('Nightly language-pack readiness does not retry terminal HTTP failures', async () => {
