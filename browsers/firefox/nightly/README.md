@@ -129,9 +129,12 @@ values:
   matching immutable URLs, destination filenames, and SHA-512 hashes.
 
 The resolver requires both architecture Buildhub records to identify the same
-build ID, version, timestamp, and source revision. It verifies archive
-signatures and requires every included language pack to have a matching
-SHA-512 checksum from that build. A direct `404` from an immutable localization
+build ID, version, timestamp, and source revision. Mozilla updates
+`latest-mozilla-central` separately for each architecture as its build
+finishes, so the live-latest revision is the oldest of the per-architecture
+latest build IDs, resolved from its immutable build directory. The resolver
+verifies archive signatures and requires every included language pack to have
+a matching SHA-512 checksum from that build. A direct `404` from an immutable localization
 checksum URL may omit that locale after bounded retries; redirects, other HTTP
 failures, malformed checksums, and missing SHA-512 entries still fail
 resolution. Patched values never return to the source checkout.

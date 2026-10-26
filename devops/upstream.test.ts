@@ -37,6 +37,7 @@ import {
   PatchManifest,
   PatchMetainfo,
   ResolveNightlyLanguagePacks,
+  SelectLatestNightlyBuildId,
   ShouldBuildDefinition,
   type INightlyLanguagePackResolutionDependencies,
 } from './upstream.js'
@@ -112,6 +113,23 @@ test('Firefox version and Nightly build comparisons are numeric and chronologica
   assert.equal(CompareNightlyBuildIds('20260729010203', '20260728235959'), 1)
   assert.equal(CompareNightlyBuildIds('20260728214328', '20260728214328'), 0)
   assert.equal(CompareNightlyBuildIds('20260727000000', '20260728214328'), -1)
+})
+
+test('latest Nightly selection falls back to the build every architecture published', () => {
+  assert.equal(
+    SelectLatestNightlyBuildId(['20261026154357', '20261026154357']),
+    '20261026154357',
+  )
+  assert.equal(
+    SelectLatestNightlyBuildId(['20261026154357', '20261026210443']),
+    '20261026154357',
+  )
+  assert.equal(
+    SelectLatestNightlyBuildId(['20261026210443', '20261026154357']),
+    '20261026154357',
+  )
+  assert.throws(() => SelectLatestNightlyBuildId([]), /No latest Nightly build IDs/u)
+  assert.throws(() => SelectLatestNightlyBuildId(['20261026154357', 'latest']))
 })
 
 test('Mozilla keyring contains the pinned primary and accepted signing subkeys', async () => {
