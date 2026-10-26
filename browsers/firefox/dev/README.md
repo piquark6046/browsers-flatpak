@@ -44,6 +44,45 @@ symlinks. After devops preprocessing, XPI files live under
 copied from the verified archive to the Flatpak export path without altering
 their originals.
 
+## Bundled fonts
+
+The Freedesktop runtime provides DejaVu, Liberation, GNU FreeFont, and Noto
+Color Emoji fonts. These cover Latin, Cyrillic, Greek, and many other scripts,
+but not CJK, Telugu, Myanmar, Khmer, Tibetan, or Mongolian text, which would
+render as missing-glyph boxes unless the host exposes a covering font. GNU
+FreeFont is also the runtime's only font for the remaining Indic scripts.
+
+- The `noto-sans-cjk` module installs the Regular and Bold Noto Sans CJK font
+  collections from the upstream `Sans2.004` release into
+  `/app/share/fonts/noto-cjk/`. The archive's SHA-256 matches the one pinned
+  by the Freedesktop SDK.
+- The `noto-fonts` module installs Regular and Bold Noto Sans Bengali,
+  Devanagari, Gujarati, Gurmukhi, Kannada, Khmer, Malayalam, Myanmar, Oriya,
+  Sinhala, Tamil, and Telugu, Noto Serif Tibetan, and Regular Noto Sans
+  Mongolian into `/app/share/fonts/noto/`. Mongolian has no upstream Bold
+  weight, and Tibetan has no upstream sans-serif design. Every file is pinned
+  to one `notofonts.github.io` commit, the source the Freedesktop SDK uses for
+  Noto fonts.
+
+Flatpak Builder records each module's SIL Open Font License below
+`/app/share/licenses/`.
+
+`files/noto-fonts.conf` is installed as `/app/etc/fonts/local.conf`, which the
+runtime's fontconfig configuration includes. It prefers these fonts for the
+generic families only, so explicitly requested font families are unaffected
+and host fonts remain available through Flatpak's font sharing:
+
+- For `ja`, `ko`, `zh-cn`, `zh-tw`, and `zh-hk` content, it prefers the
+  matching regional Noto Sans CJK face for `sans-serif`, `serif`, and
+  `monospace` so Han characters use their local forms.
+- For content in a language written in one of the Indic scripts above, it
+  prefers the matching Noto font over GNU FreeFont for `sans-serif` and
+  `serif`. Fontconfig lists GNU FreeFont by name among the generic families,
+  so Indic text on pages without a language tag can still use it.
+
+Telugu, Myanmar, Khmer, Tibetan, and Mongolian need no rule because no other
+bundled or runtime font covers them.
+
 ## Sandbox permissions
 
 The permissions follow Mozilla's Firefox Flatpak packaging and are kept

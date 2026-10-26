@@ -44,6 +44,113 @@ cleanup-commands:
   - mkdir -p "${FLATPAK_DEST}/etc/firefox"
 
 modules:
+  # The Freedesktop runtime has no CJK fonts, so Korean, Japanese, and Chinese
+  # text renders as missing glyphs unless the host exposes a covering font.
+  - name: noto-sans-cjk
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 -t "${FLATPAK_DEST}/share/fonts/noto-cjk" NotoSansCJK-Regular.ttc NotoSansCJK-Bold.ttc
+    sources:
+      - type: archive
+        url: https://github.com/notofonts/noto-cjk/releases/download/Sans2.004/03_NotoSansCJK-OTC.zip
+        sha256: 528f4e1b25ff3badb0321b38d015d954c4c0de926c7830ef50e4a1948f6a3eed
+        strip-components: 0
+
+  # The runtime has no font for Telugu, Myanmar, Khmer, Tibetan, or Mongolian
+  # and covers the other Indic scripts only with GNU FreeFont.
+  - name: noto-fonts
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 -t "${FLATPAK_DEST}/share/fonts/noto" *.ttf
+      - install -Dm644 noto-fonts.conf "${FLATPAK_DEST}/etc/fonts/local.conf"
+    sources:
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/LICENSE
+        sha256: f2095b08bed08b23a6fe26112fcd679a2bee3f002eef077eb05d215ed1051bd8
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansBengali/hinted/ttf/NotoSansBengali-Bold.ttf
+        sha256: 923c6a4c2eb618a57ed83f4bca855b4f5287b87906a4d9df40a2ffa8ebd8c2e8
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansBengali/hinted/ttf/NotoSansBengali-Regular.ttf
+        sha256: b55c62ee531e3214da6c0701daecea89a52ba42db7d8206b92e6b51f397a3193
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Bold.ttf
+        sha256: 6a09c8d797cfc803d32cdc731e809424d74cbaff59f503de34ade421a08e5bc2
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Regular.ttf
+        sha256: 4e3c66638958c3e2ab5d37f47a8deb89fffeb7be9985c665a519bbc7ba762313
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansGujarati/hinted/ttf/NotoSansGujarati-Bold.ttf
+        sha256: 7c1da9cad53f83804a330bad413b015987f4b6520da54263b0e39b7b8736525b
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansGujarati/hinted/ttf/NotoSansGujarati-Regular.ttf
+        sha256: 9b5a7aaeeb649a2e75a49d8b006a1f87db1b61c0df3b001609f4e0725d88dbf6
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansGurmukhi/hinted/ttf/NotoSansGurmukhi-Bold.ttf
+        sha256: 4f1bb4b1a05a0ebe1520678132a9448fce8f1741552c5292d7df7a7786d2c956
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansGurmukhi/hinted/ttf/NotoSansGurmukhi-Regular.ttf
+        sha256: 658d0207da305a1411c539a8b0bbeda64d4146e54fb4827facddb890b6b90d74
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansKannada/hinted/ttf/NotoSansKannada-Bold.ttf
+        sha256: 3db1507b3f856185fc7c00dc0addfd4797a8ea6955b86d1d21fa659cc9d5e849
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansKannada/hinted/ttf/NotoSansKannada-Regular.ttf
+        sha256: 9ad74dc64838c6855b96f671fc08e425a58921b9d0c71712ea79c328a27e6e38
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansKhmer/hinted/ttf/NotoSansKhmer-Bold.ttf
+        sha256: 17e5bb518c0ea3d998d42bf920d0771a79dc6f3c12c5d9f3c122c7e6c8ce3076
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansKhmer/hinted/ttf/NotoSansKhmer-Regular.ttf
+        sha256: e66675f2082788f0511a714bef5a1748928294b38c8e286a96ea73a864b5e605
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansMalayalam/hinted/ttf/NotoSansMalayalam-Bold.ttf
+        sha256: d5c52d4fdf019feb21cdb748573308fa5fdd94a81d5bc71c603c076207039590
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansMalayalam/hinted/ttf/NotoSansMalayalam-Regular.ttf
+        sha256: c08de7fa8d032a5d6a4d120fb82c78cec60b362a4e73fa26360d89759ff2a7f9
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansMongolian/hinted/ttf/NotoSansMongolian-Regular.ttf
+        sha256: a28ba3cde3de22de7ddc934bd5d5babe54e6ce28c073a288cd978ffcf26b295b
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansMyanmar/hinted/ttf/NotoSansMyanmar-Bold.ttf
+        sha256: 99a8c6768416747653232ded39292e789ca579f4272adfb2886f6aa219d20302
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansMyanmar/hinted/ttf/NotoSansMyanmar-Regular.ttf
+        sha256: fafce4db400bc0b214907ccdbfb0ad2f18a57bfefd08c8a571830b84088cf2fc
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansOriya/hinted/ttf/NotoSansOriya-Bold.ttf
+        sha256: 1c575e8aba40d6baf200e8abac534e9517f431d38cc8131715643037eec149da
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansOriya/hinted/ttf/NotoSansOriya-Regular.ttf
+        sha256: a16645d056017927406546aa78e4ce15e782fd8783467267b75450453d007415
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansSinhala/hinted/ttf/NotoSansSinhala-Bold.ttf
+        sha256: e1f8867effb18940b02173a120641e526e5aaa8efc176870e62b2d49b1e6fd3f
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansSinhala/hinted/ttf/NotoSansSinhala-Regular.ttf
+        sha256: 9e32612d47004552f3125e78648a9e2e7899a216ccd3cefbb93a9b5f4c809feb
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansTamil/hinted/ttf/NotoSansTamil-Bold.ttf
+        sha256: 683682d585698b8b44da066d4903762d8aaa471bdffb919ac869753689ba3950
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansTamil/hinted/ttf/NotoSansTamil-Regular.ttf
+        sha256: 3c0a186feb3c63c7f6d63e1511dcdc144e745ae09b98e217c83f3e317974f6f9
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansTelugu/hinted/ttf/NotoSansTelugu-Bold.ttf
+        sha256: ec98c4f82abfe52ebe00be298d39c469deb86cf027929987759ba1eab361fbb4
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSansTelugu/hinted/ttf/NotoSansTelugu-Regular.ttf
+        sha256: b274780b69d1d23fe84b55e809a152cb2ac5306d33864b1f87622f6971871aae
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSerifTibetan/hinted/ttf/NotoSerifTibetan-Bold.ttf
+        sha256: 1e8ca12dff8bf6adee21f5b0a6ba827fc2f9b3c515655983438371d1275e1d53
+      - type: file
+        url: https://raw.githubusercontent.com/notofonts/notofonts.github.io/025970232f4f8ff349310d9785431e87d20ed27c/fonts/NotoSerifTibetan/hinted/ttf/NotoSerifTibetan-Regular.ttf
+        sha256: ee97bf3dc56e813651db734c9f35f8f1d41e7e31acf5f7d893e64ad22b292446
+      - type: file
+        path: files/noto-fonts.conf
+
   - name: firefox-dev
     buildsystem: simple
     no-python-timestamp-fix: true

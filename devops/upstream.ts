@@ -499,20 +499,52 @@ async function DiscoverNightlyVersion(BaseUrl: URL): Promise<string> {
   return NightlyVersionSchema.parse(Versions[0])
 }
 
-async function LatestNightlyVersion(): Promise<string> {
-  const Versions = await Promise.all(Architectures.map(async (Architecture) => {
-    const FinalUrl = await ResolveRedirect(NightlyRotatingUrl(Architecture))
-    const Platform = ArchitectureDirectory(Architecture)
-    const Match = new RegExp(
-      `/latest-mozilla-central/firefox-([^/]+)\\.en-US\\.${Platform}\\.tar\\.xz$`,
-      'u',
-    ).exec(FinalUrl.pathname)
-    return NightlyVersionSchema.parse(Match?.[1])
-  }))
-  if (!Versions.every((Version) => Version === Versions[0])) {
-    throw new Error(`Mozilla latest Nightly redirects disagree: ${Versions.join(', ')}`)
+async function LatestNightlyBuildId(Architecture: TArchitecture): Promise<string> {
+  const FinalUrl = await ResolveRedirect(NightlyRotatingUrl(Architecture))
+  const Platform = ArchitectureDirectory(Architecture)
+  const Match = new RegExp(
+    `/latest-mozilla-central/firefox-([^/]+)\\.en-US\\.${Platform}\\.tar\\.xz$`,
+    'u',
+  ).exec(FinalUrl.pathname)
+  const Version = NightlyVersionSchema.parse(Match?.[1])
+  const Record = NightlyBuildhubSchema.parse(JSON.parse(await FetchText(
+    new URL(`firefox-${Version}.en-US.${Platform}.buildhub.json`, NightlyLatestRoot),
+  )) as unknown)
+  if (Record.target.platform !== Platform) {
+    throw new Error(
+      `Nightly Buildhub platform mismatch: expected ${Platform}, `
+      + `received ${Record.target.platform}`,
+    )
   }
-  return Versions[0]!
+  return NightlyBuildIdSchema.parse(Record.build.id)
+}
+
+// Mozilla updates latest-mozilla-central separately for each architecture as
+// its build finishes, so the oldest per-architecture latest build is the newest
+// one that every architecture can have published.
+export function SelectLatestNightlyBuildId(LatestBuildIds: readonly string[]): string {
+  const [First, ...Rest] = LatestBuildIds.map((BuildId) => NightlyBuildIdSchema.parse(BuildId))
+  if (First === undefined) {
+    throw new Error('No latest Nightly build IDs to select from')
+  }
+  return Rest.reduce(
+    (Oldest, BuildId) => CompareNightlyBuildIds(BuildId, Oldest) < 0 ? BuildId : Oldest,
+    First,
+  )
+}
+
+async function FetchLatestNightlyBuildRecords(): Promise<
+  readonly [TNightlyBuildhub, TNightlyBuildhub]
+> {
+  const LatestBuildIds = await Promise.all(Architectures.map(LatestNightlyBuildId))
+  const BuildId = SelectLatestNightlyBuildId(LatestBuildIds)
+  if (LatestBuildIds.some((Candidate) => Candidate !== BuildId)) {
+    console.warn(
+      `Latest Nightly builds differ by architecture (${LatestBuildIds.join(', ')}); `
+      + `resolving ${BuildId} from its immutable build directory`,
+    )
+  }
+  return await FetchNightlyBuildRecords(BuildId)
 }
 
 function BuildIdFromDate(DateText: string): string {
@@ -526,18 +558,10 @@ function BuildIdFromDate(DateText: string): string {
 }
 
 async function FetchNightlyBuildRecords(
-  RequestedBuildId?: string,
+  RequestedBuildId: string,
 ): Promise<readonly [TNightlyBuildhub, TNightlyBuildhub]> {
-  let BaseUrl: URL
-  let Version: string
-  if (RequestedBuildId === undefined) {
-    BaseUrl = new URL(NightlyLatestRoot)
-    Version = await LatestNightlyVersion()
-  } else {
-    const Directory = NightlyBuildDirectory(RequestedBuildId)
-    BaseUrl = Directory.BaseUrl
-    Version = await DiscoverNightlyVersion(BaseUrl)
-  }
+  const BaseUrl = NightlyBuildDirectory(RequestedBuildId).BaseUrl
+  const Version = await DiscoverNightlyVersion(BaseUrl)
 
   const Records = await Promise.all(Architectures.map(async (Architecture) => {
     const Platform = ArchitectureDirectory(Architecture)
@@ -589,7 +613,7 @@ async function FetchNightlyBuildRecords(
   if (!BuildDirectories.every((Value) => Value === BuildDirectories[0])) {
     throw new Error('Nightly architecture downloads are not in the same build directory')
   }
-  if (RequestedBuildId !== undefined && X86Record.build.id !== RequestedBuildId) {
+  if (X86Record.build.id !== RequestedBuildId) {
     throw new Error(
       `Nightly directory ${RequestedBuildId} contains build ${X86Record.build.id}`,
     )
@@ -1091,11 +1115,9 @@ async function ResolveProductionFacts(
   const DeveloperVersion = Options.Version === undefined
     ? await ResolveLatestDeveloperVersion()
     : BetaVersionSchema.parse(Options.Version)
-  const NightlyRecords = await FetchNightlyBuildRecords(
-    Options.NightlyBuildId === undefined
-      ? undefined
-      : NightlyBuildIdSchema.parse(Options.NightlyBuildId),
-  )
+  const NightlyRecords = Options.NightlyBuildId === undefined
+    ? await FetchLatestNightlyBuildRecords()
+    : await FetchNightlyBuildRecords(NightlyBuildIdSchema.parse(Options.NightlyBuildId))
   return await Promise.all([
     ResolveDeveloperReleaseFacts(DeveloperVersion),
     ResolveNightlyReleaseFacts(NightlyRecords),
@@ -1126,7 +1148,7 @@ async function ResolvePullRequestDefinitions(
 
   const [TrackedNightlyBuildId, LatestNightlyRecords] = await Promise.all([
     ReadTrackedNightlyBuildId(),
-    FetchNightlyBuildRecords(),
+    FetchLatestNightlyBuildRecords(),
   ])
   if (TrackedNightlyBuildId === LatestNightlyRecords[0].build.id) {
     Resolutions.push(await CreatePatchedDefinition(
