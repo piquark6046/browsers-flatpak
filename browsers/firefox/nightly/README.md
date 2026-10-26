@@ -49,6 +49,24 @@ symlinks. After devops preprocessing, XPI files live under
 copied from the verified archive to the Flatpak export path without altering
 their originals.
 
+## Bundled fonts
+
+The Freedesktop runtime provides DejaVu, Liberation, GNU FreeFont, and Noto
+Color Emoji fonts, but no CJK fonts. Unless the host exposes a covering font,
+Korean, Japanese, and Chinese text would render as missing-glyph boxes. The
+`noto-sans-cjk` module therefore installs the Regular and Bold Noto Sans CJK
+font collections from the upstream `Sans2.004` release into
+`/app/share/fonts/noto-cjk/`. The archive's SHA-256 matches the one pinned by
+the Freedesktop SDK, and Flatpak Builder records its SIL Open Font License
+below `/app/share/licenses/`.
+
+`files/noto-sans-cjk.conf` is installed as `/app/etc/fonts/local.conf`, which
+the runtime's fontconfig configuration includes. For `ja`, `ko`, `zh-cn`,
+`zh-tw`, and `zh-hk` content, it prefers the matching regional face for the
+generic `sans-serif`, `serif`, and `monospace` families so Han characters use
+their local forms. Explicitly requested font families are unaffected, and host
+fonts remain available through Flatpak's font sharing.
+
 ## Sandbox permissions
 
 The permissions follow Mozilla's Firefox Flatpak packaging and are kept

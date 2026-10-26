@@ -44,6 +44,21 @@ cleanup-commands:
   - mkdir -p "${FLATPAK_DEST}/etc/firefox"
 
 modules:
+  # The Freedesktop runtime has no CJK fonts, so Korean, Japanese, and Chinese
+  # text renders as missing glyphs unless the host exposes a covering font.
+  - name: noto-sans-cjk
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 -t "${FLATPAK_DEST}/share/fonts/noto-cjk" NotoSansCJK-Regular.ttc NotoSansCJK-Bold.ttc
+      - install -Dm644 noto-sans-cjk.conf "${FLATPAK_DEST}/etc/fonts/local.conf"
+    sources:
+      - type: archive
+        url: https://github.com/notofonts/noto-cjk/releases/download/Sans2.004/03_NotoSansCJK-OTC.zip
+        sha256: 528f4e1b25ff3badb0321b38d015d954c4c0de926c7830ef50e4a1948f6a3eed
+        strip-components: 0
+      - type: file
+        path: files/noto-sans-cjk.conf
+
   - name: firefox-nightly
     buildsystem: simple
     no-python-timestamp-fix: true
