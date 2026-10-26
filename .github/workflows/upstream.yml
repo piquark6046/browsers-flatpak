@@ -61,11 +61,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # 6.0.9
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # 6.1.0
         with:
           run_install: false
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # 7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # 7.1.0
         with:
           node-version: '24'
           cache: pnpm
@@ -101,7 +101,7 @@ jobs:
           fi
           npm run ci:upstream -- "${arguments[@]}"
       - name: Upload verified resolution
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # 7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # 7.0.2
         with:
           name: verified-production-resolution
           path: ${{ runner.temp }}/resolution
@@ -160,7 +160,7 @@ jobs:
             --directory="${RUNNER_TEMP}/export" \
             repo
       - name: Upload unsigned native repository
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # 7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # 7.0.2
         with:
           name: ${{ matrix.ArtifactName }}
           path: ${{ runner.temp }}/export/repo.tar
@@ -177,7 +177,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: flatpak-signing
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:f584c1b5d516b413993557f9f88d2532e32888386e043ce4c8c4afeaf771c6b9
+      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:6ed6921bb5a9e1a916989971844f159b854b7b225880c381fa34f7a158863039
       options: --privileged
     steps:
       - name: Check out reviewed source
@@ -185,11 +185,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # 6.0.9
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # 6.1.0
         with:
           run_install: false
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # 7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # 7.1.0
         with:
           node-version: '24'
           cache: pnpm
@@ -255,4 +255,4 @@ jobs:
     steps:
       - name: Deploy signed artifact
         id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # 5.0.0
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # 5.0.1
