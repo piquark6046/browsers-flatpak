@@ -20,7 +20,7 @@
     "@typescriptprime/parsing": "^2.0.1",
     "@typescriptprime/securereq": "^2.0.0",
     "yaml": "^2.9.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
